@@ -56,7 +56,7 @@ namespace ReClassNET.CodeGenerator
 					OrderByInheritance(classNodes.Where(c => c.Nodes.None(n => n is FunctionNode))).Select(c =>
 					{
 						var csb = new StringBuilder();
-						csb.Append($"class {c.Name}");
+						csb.Append($"struct {c.Name}");
 
 						bool skipFirstMember = false;
 						if (c.Nodes.FirstOrDefault() is ClassInstanceNode inheritedFromNode)
@@ -74,7 +74,7 @@ namespace ReClassNET.CodeGenerator
 						csb.AppendLine();
 
 						csb.AppendLine("{");
-						csb.AppendLine("public:");
+						//csb.AppendLine("public:");
 						csb.AppendLine(
 							string.Join(
 								Environment.NewLine,
@@ -221,11 +221,11 @@ namespace ReClassNET.CodeGenerator
 				{
 					var ptrArray = (ClassPtrArrayNode)member;
 
-					yield return new MemberDefinition(member, $"class {ptrArray.InnerNode.Name}*", ptrArray.Count);
+					yield return new MemberDefinition(member, $"struct {ptrArray.InnerNode.Name}*", ptrArray.Count);
 				}
 				else if (member is ClassPtrNode)
 				{
-					yield return new MemberDefinition(member, $"class {((ClassPtrNode)member).InnerNode.Name}*");
+					yield return new MemberDefinition(member, $"struct {((ClassPtrNode)member).InnerNode.Name}*");
 				}
 				else
 				{
