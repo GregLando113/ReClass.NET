@@ -1,10 +1,10 @@
-﻿using System.Diagnostics.Contracts;
+using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Text;
+using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
@@ -12,64 +12,66 @@ namespace ReClassNET.Nodes
 	{
 		public int Length { get; set; }
 
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => Length * CharacterSize;
 
 		/// <summary>The encoding of the string.</summary>
 		public abstract Encoding Encoding { get; }
 
 		/// <summary>Size of one character in bytes.</summary>
-		private int CharacterSize => Encoding.GetSimpleByteCountPerChar();
+		private int CharacterSize => Encoding.GuessByteCountPerChar();
 
 		public override void CopyFromNode(BaseNode node)
 		{
 			Length = node.MemorySize / CharacterSize;
 		}
 
-		protected Size DrawText(ViewInfo view, int x, int y, string type)
+		protected Size DrawText(DrawContext context, int x, int y, string type)
 		{
-			Contract.Requires(view != null);
+			Contract.Requires(context != null);
 			Contract.Requires(type != null);
 
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
 
 			var length = MemorySize / CharacterSize;
-			var text = ReadValueFromMemory(view.Memory);
-
-			DrawInvalidMemoryIndicator(view, y);
+			var text = ReadValueFromMemory(context.Memory);
 
 			var origX = x;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding;
-			x = AddIcon(view, x, y, Icons.Text, HotSpot.NoneId, HotSpotType.None);
-			x = AddAddressOffset(view, x, y);
+			x = AddIconPadding(context, x);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, type) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name);
-			x = AddText(view, x, y, view.Settings.IndexColor, HotSpot.NoneId, "[");
-			x = AddText(view, x, y, view.Settings.IndexColor, 0, length.ToString());
-			x = AddText(view, x, y, view.Settings.IndexColor, HotSpot.NoneId, "]") + view.Font.Width;
+			x = AddIcon(context, x, y, context.IconProvider.Text, HotSpot.NoneId, HotSpotType.None);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TextColor, HotSpot.NoneId, "= '");
-			x = AddText(view, x, y, view.Settings.TextColor, 1, text.LimitLength(150));
-			x = AddText(view, x, y, view.Settings.TextColor, HotSpot.NoneId, "'") + view.Font.Width;
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, type) + context.Font.Width;
+			if (!IsWrapped)
+			{
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name);
+			}
+			x = AddText(context, x, y, context.Settings.IndexColor, HotSpot.NoneId, "[");
+			x = AddText(context, x, y, context.Settings.IndexColor, 0, length.ToString());
+			x = AddText(context, x, y, context.Settings.IndexColor, HotSpot.NoneId, "]") + context.Font.Width;
 
-			x = AddComment(view, x, y);
+			x = AddText(context, x, y, context.Settings.TextColor, HotSpot.NoneId, "= '");
+			x = AddText(context, x, y, context.Settings.TextColor, 1, text.LimitLength(150));
+			x = AddText(context, x, y, context.Settings.TextColor, HotSpot.NoneId, "'") + context.Font.Width;
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
+			x = AddComment(context, x, y);
 
-			return new Size(x - origX, view.Font.Height);
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
+
+			return new Size(x - origX, context.Font.Height);
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			return IsHidden ? HiddenHeight : view.Font.Height;
+			return IsHidden && !IsWrapped ? HiddenHeight : context.Font.Height;
 		}
 
 		public override void Update(HotSpot spot)
@@ -82,8 +84,13 @@ namespace ReClassNET.Nodes
 				{
 					Length = val;
 
-					ParentNode.ChildHasChanged(this);
+					GetParentContainer()?.ChildHasChanged(this);
 				}
+			}
+			else if (spot.Id == 1)
+			{
+				var data = Encoding.GetBytes(spot.Text);
+				spot.Process.WriteRemoteMemory(spot.Address, data);
 			}
 		}
 

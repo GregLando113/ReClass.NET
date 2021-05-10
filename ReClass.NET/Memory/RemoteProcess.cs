@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -12,19 +12,21 @@ using ReClassNET.Debugger;
 using ReClassNET.Extensions;
 using ReClassNET.Native;
 using ReClassNET.Symbols;
-using ReClassNET.Util;
+using ReClassNET.Util.Conversion;
 
 namespace ReClassNET.Memory
 {
 	public delegate void RemoteProcessEvent(RemoteProcess sender);
 
-	public class RemoteProcess : IDisposable
+	public class RemoteProcess : IDisposable, IRemoteMemoryReader, IRemoteMemoryWriter, IProcessReader
 	{
 		private readonly object processSync = new object();
 
 		private readonly CoreFunctionsManager coreFunctions;
 
 		private readonly RemoteDebugger debugger;
+
+		private readonly Dictionary<string, Func<RemoteProcess, IntPtr>> formulaCache = new Dictionary<string, Func<RemoteProcess, IntPtr>>();
 
 		private readonly Dictionary<IntPtr, string> rttiCache = new Dictionary<IntPtr, string>();
 
@@ -54,17 +56,17 @@ namespace ReClassNET.Memory
 
 		public SymbolStore Symbols => symbols;
 
+		public EndianBitConverter BitConverter { get; set; } = EndianBitConverter.System;
+
 		/// <summary>Gets a copy of the current modules list. This list may change if the remote process (un)loads a module.</summary>
 		public IEnumerable<Module> Modules
 		{
 			get
 			{
-				List<Module> cpy;
 				lock (modules)
 				{
-					cpy = modules.ToList();
+					return new List<Module>(modules);
 				}
-				return cpy;
 			}
 		}
 
@@ -73,12 +75,10 @@ namespace ReClassNET.Memory
 		{
 			get
 			{
-				List<Section> cpy;
 				lock (sections)
 				{
-					cpy = sections.ToList();
+					return new List<Section>(sections);
 				}
-				return cpy;
 			}
 		}
 
@@ -148,9 +148,6 @@ namespace ReClassNET.Memory
 
 		#region ReadMemory
 
-		/// <summary>Reads remote memory from the address into the buffer.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <param name="buffer">[out] The data buffer to fill. If the remote process is not valid, the buffer will get filled with zeros.</param>
 		public bool ReadRemoteMemoryIntoBuffer(IntPtr address, ref byte[] buffer)
 		{
 			Contract.Requires(buffer != null);
@@ -159,11 +156,6 @@ namespace ReClassNET.Memory
 			return ReadRemoteMemoryIntoBuffer(address, ref buffer, 0, buffer.Length);
 		}
 
-		/// <summary>Reads remote memory from the address into the buffer.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <param name="buffer">[out] The data buffer to fill. If the remote process is not valid, the buffer will get filled with zeros.</param>
-		/// <param name="offset">The offset in the data.</param>
-		/// <param name="length">The number of bytes to read.</param>
 		public bool ReadRemoteMemoryIntoBuffer(IntPtr address, ref byte[] buffer, int offset, int length)
 		{
 			Contract.Requires(buffer != null);
@@ -185,10 +177,6 @@ namespace ReClassNET.Memory
 			return coreFunctions.ReadRemoteMemory(handle, address, ref buffer, offset, length);
 		}
 
-		/// <summary>Reads <paramref name="size"/> bytes from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <param name="size">The size in bytes to read.</param>
-		/// <returns>An array of bytes.</returns>
 		public byte[] ReadRemoteMemory(IntPtr address, int size)
 		{
 			Contract.Requires(size >= 0);
@@ -199,213 +187,13 @@ namespace ReClassNET.Memory
 			return data;
 		}
 
-		/// <summary>Reads the object from the address in the remote process.</summary>
-		/// <typeparam name="T">Type of the value to read.</typeparam>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The remote object.</returns>
-		public T ReadRemoteObject<T>(IntPtr address) where T : struct
-		{
-			var data = ReadRemoteMemory(address, Marshal.SizeOf<T>());
-
-			var gcHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
-			var obj = (T)Marshal.PtrToStructure(gcHandle.AddrOfPinnedObject(), typeof(T));
-			gcHandle.Free();
-
-			return obj;
-		}
-
-		#region Read Remote Primitive Types
-
-		/// <summary>Reads a <see cref="sbyte"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="sbyte"/> or 0 if the read fails.</returns>
-		public sbyte ReadRemoteInt8(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(sbyte));
-
-			return (sbyte)data[0];
-		}
-
-		/// <summary>Reads a <see cref="byte"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="byte"/> or 0 if the read fails.</returns>
-		public byte ReadRemoteUInt8(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(byte));
-
-			return data[0];
-		}
-
-		/// <summary>Reads a <see cref="short"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="short"/> or 0 if the read fails.</returns>
-		public short ReadRemoteInt16(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(short));
-
-			return BitConverter.ToInt16(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="ushort"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="ushort"/> or 0 if the read fails.</returns>
-		public ushort ReadRemoteUInt16(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(ushort));
-
-			return BitConverter.ToUInt16(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="int"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="int"/> or 0 if the read fails.</returns>
-		public int ReadRemoteInt32(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(int));
-
-			return BitConverter.ToInt32(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="uint"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="uint"/> or 0 if the read fails.</returns>
-		public uint ReadRemoteUInt32(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(uint));
-
-			return BitConverter.ToUInt32(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="long"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="long"/> or 0 if the read fails.</returns>
-		public long ReadRemoteInt64(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(long));
-
-			return BitConverter.ToInt64(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="ulong"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="ulong"/> or 0 if the read fails.</returns>
-		public ulong ReadRemoteUInt64(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(ulong));
-
-			return BitConverter.ToUInt64(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="float"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="float"/> or 0 if the read fails.</returns>
-		public float ReadRemoteFloat(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(float));
-
-			return BitConverter.ToSingle(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="double"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="double"/> or 0 if the read fails.</returns>
-		public double ReadRemoteDouble(IntPtr address)
-		{
-			var data = ReadRemoteMemory(address, sizeof(double));
-
-			return BitConverter.ToDouble(data, 0);
-		}
-
-		/// <summary>Reads a <see cref="IntPtr"/> from the address in the remote process.</summary>
-		/// <param name="address">The address to read from.</param>
-		/// <returns>The data read as <see cref="IntPtr"/> or 0 if the read fails.</returns>
-		public IntPtr ReadRemoteIntPtr(IntPtr address)
-		{
-#if RECLASSNET64
-			return (IntPtr)ReadRemoteInt64(address);
-#else
-			return (IntPtr)ReadRemoteInt32(address);
-#endif
-		}
-
-		#endregion
-
-		/// <summary>Reads a string from the address in the remote process with the given length using the provided encoding.</summary>
-		/// <param name="encoding">The encoding used by the string.</param>
-		/// <param name="address">The address of the string.</param>
-		/// <param name="length">The length of the string.</param>
-		/// <returns>The string.</returns>
-		public string ReadRemoteString(Encoding encoding, IntPtr address, int length)
-		{
-			Contract.Requires(encoding != null);
-			Contract.Requires(length >= 0);
-			Contract.Ensures(Contract.Result<string>() != null);
-
-			var data = ReadRemoteMemory(address, length);
-
-			try
-			{
-				var sb = new StringBuilder(encoding.GetString(data));
-				for (var i = 0; i < sb.Length; ++i)
-				{
-					if (sb[i] == 0)
-					{
-						sb.Length = i;
-						break;
-					}
-					if (!sb[i].IsPrintable())
-					{
-						sb[i] = '.';
-					}
-				}
-				return sb.ToString();
-			}
-			catch
-			{
-				return string.Empty;
-			}
-		}
-
-		/// <summary>Reads a string from the address in the remote process with the given length using UTF8 encoding. The string gets truncated at the first zero character.</summary>
-		/// <param name="address">The address of the string.</param>
-		/// <param name="length">The length of the string.</param>
-		/// <returns>The string.</returns>
-		public string ReadRemoteUTF8StringUntilFirstNullCharacter(IntPtr address, int length)
-		{
-			Contract.Requires(length >= 0);
-			Contract.Ensures(Contract.Result<string>() != null);
-
-			var data = ReadRemoteMemory(address, length);
-
-			int index = 0;
-			for (; index < data.Length; ++index)
-			{
-				if (data[index] == 0)
-				{
-					break;
-				}
-			}
-
-			try
-			{
-				return Encoding.UTF8.GetString(data, 0, Math.Min(index, data.Length));
-			}
-			catch
-			{
-				return string.Empty;
-			}
-		}
-
-		/// <summary>Reads remote runtime type information for the given address from the remote process.</summary>
-		/// <param name="address">The address.</param>
-		/// <returns>A string containing the runtime type information or null if no information could get found.</returns>
 		public string ReadRemoteRuntimeTypeInformation(IntPtr address)
 		{
 			if (address.MayBeValid())
 			{
 				if (!rttiCache.TryGetValue(address, out var rtti))
 				{
-					var objectLocatorPtr = ReadRemoteIntPtr(address - IntPtr.Size);
+					var objectLocatorPtr = this.ReadRemoteIntPtr(address - IntPtr.Size);
 					if (objectLocatorPtr.MayBeValid())
 					{
 
@@ -426,25 +214,25 @@ namespace ReClassNET.Memory
 
 		private string ReadRemoteRuntimeTypeInformation32(IntPtr address)
 		{
-			var classHierarchyDescriptorPtr = ReadRemoteIntPtr(address + 0x10);
+			var classHierarchyDescriptorPtr = this.ReadRemoteIntPtr(address + 0x10);
 			if (classHierarchyDescriptorPtr.MayBeValid())
 			{
-				var baseClassCount = ReadRemoteInt32(classHierarchyDescriptorPtr + 8);
+				var baseClassCount = this.ReadRemoteInt32(classHierarchyDescriptorPtr + 8);
 				if (baseClassCount > 0 && baseClassCount < 25)
 				{
-					var baseClassArrayPtr = ReadRemoteIntPtr(classHierarchyDescriptorPtr + 0xC);
+					var baseClassArrayPtr = this.ReadRemoteIntPtr(classHierarchyDescriptorPtr + 0xC);
 					if (baseClassArrayPtr.MayBeValid())
 					{
 						var sb = new StringBuilder();
 						for (var i = 0; i < baseClassCount; ++i)
 						{
-							var baseClassDescriptorPtr = ReadRemoteIntPtr(baseClassArrayPtr + (4 * i));
+							var baseClassDescriptorPtr = this.ReadRemoteIntPtr(baseClassArrayPtr + (4 * i));
 							if (baseClassDescriptorPtr.MayBeValid())
 							{
-								var typeDescriptorPtr = ReadRemoteIntPtr(baseClassDescriptorPtr);
+								var typeDescriptorPtr = this.ReadRemoteIntPtr(baseClassDescriptorPtr);
 								if (typeDescriptorPtr.MayBeValid())
 								{
-									var name = ReadRemoteUTF8StringUntilFirstNullCharacter(typeDescriptorPtr + 0x0C, 60);
+									var name = this.ReadRemoteStringUntilFirstNullCharacter(typeDescriptorPtr + 0x0C, Encoding.UTF8, 60);
 									if (name.EndsWith("@@"))
 									{
 										name = NativeMethods.UndecorateSymbolName("?" + name);
@@ -475,20 +263,20 @@ namespace ReClassNET.Memory
 
 		private string ReadRemoteRuntimeTypeInformation64(IntPtr address)
 		{
-			int baseOffset = ReadRemoteInt32(address + 0x14);
+			int baseOffset = this.ReadRemoteInt32(address + 0x14);
 			if (baseOffset != 0)
 			{
 				var baseAddress = address - baseOffset;
 
-				var classHierarchyDescriptorOffset = ReadRemoteInt32(address + 0x10);
+				var classHierarchyDescriptorOffset = this.ReadRemoteInt32(address + 0x10);
 				if (classHierarchyDescriptorOffset != 0)
 				{
 					var classHierarchyDescriptorPtr = baseAddress + classHierarchyDescriptorOffset;
 
-					var baseClassCount = ReadRemoteInt32(classHierarchyDescriptorPtr + 0x08);
+					var baseClassCount = this.ReadRemoteInt32(classHierarchyDescriptorPtr + 0x08);
 					if (baseClassCount > 0 && baseClassCount < 25)
 					{
-						var baseClassArrayOffset = ReadRemoteInt32(classHierarchyDescriptorPtr + 0x0C);
+						var baseClassArrayOffset = this.ReadRemoteInt32(classHierarchyDescriptorPtr + 0x0C);
 						if (baseClassArrayOffset != 0)
 						{
 							var baseClassArrayPtr = baseAddress + baseClassArrayOffset;
@@ -496,17 +284,17 @@ namespace ReClassNET.Memory
 							var sb = new StringBuilder();
 							for (var i = 0; i < baseClassCount; ++i)
 							{
-								var baseClassDescriptorOffset = ReadRemoteInt32(baseClassArrayPtr + (4 * i));
+								var baseClassDescriptorOffset = this.ReadRemoteInt32(baseClassArrayPtr + (4 * i));
 								if (baseClassDescriptorOffset != 0)
 								{
 									var baseClassDescriptorPtr = baseAddress + baseClassDescriptorOffset;
 
-									var typeDescriptorOffset = ReadRemoteInt32(baseClassDescriptorPtr);
+									var typeDescriptorOffset = this.ReadRemoteInt32(baseClassDescriptorPtr);
 									if (typeDescriptorOffset != 0)
 									{
 										var typeDescriptorPtr = baseAddress + typeDescriptorOffset;
 
-										var name = ReadRemoteUTF8StringUntilFirstNullCharacter(typeDescriptorPtr + 0x14, 60);
+										var name = this.ReadRemoteStringUntilFirstNullCharacter(typeDescriptorPtr + 0x14, Encoding.UTF8, 60);
 										if (string.IsNullOrEmpty(name))
 										{
 											break;
@@ -545,10 +333,6 @@ namespace ReClassNET.Memory
 
 		#region WriteMemory
 
-		/// <summary>Writes the given <paramref name="data"/> to the <paramref name="address"/> in the remote process.</summary>
-		/// <param name="address">The address to write to.</param>
-		/// <param name="data">The data to write.</param>
-		/// <returns>True if it succeeds, false if it fails.</returns>
 		public bool WriteRemoteMemory(IntPtr address, byte[] data)
 		{
 			Contract.Requires(data != null);
@@ -561,29 +345,14 @@ namespace ReClassNET.Memory
 			return coreFunctions.WriteRemoteMemory(handle, address, ref data, 0, data.Length);
 		}
 
-		/// <summary>Writes the given <paramref name="value"/> to the <paramref name="address"/> in the remote process.</summary>
-		/// <typeparam name="T">Type of the value to write.</typeparam>
-		/// <param name="address">The address to write to.</param>
-		/// <param name="value">The value to write.</param>
-		/// <returns>True if it succeeds, false if it fails.</returns>
-		public bool WriteRemoteMemory<T>(IntPtr address, T value) where T : struct
-		{
-			var data = new byte[Marshal.SizeOf<T>()];
-
-			var gcHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
-			Marshal.StructureToPtr(value, gcHandle.AddrOfPinnedObject(), false);
-			gcHandle.Free();
-
-			return WriteRemoteMemory(address, data);
-		}
-
 		#endregion
 
 		public Section GetSectionToPointer(IntPtr address)
 		{
 			lock (sections)
 			{
-				return sections.BinaryFind(s => address.CompareToRange(s.Start, s.End));
+				var index = sections.BinarySearch(s => address.CompareToRange(s.Start, s.End));
+				return index < 0 ? null : sections[index];
 			}
 		}
 
@@ -591,7 +360,8 @@ namespace ReClassNET.Memory
 		{
 			lock (modules)
 			{
-				return modules.BinaryFind(m => address.CompareToRange(m.Start, m.End));
+				var index = modules.BinarySearch(m => address.CompareToRange(m.Start, m.End));
+				return index < 0 ? null : modules[index];
 			}
 		}
 
@@ -635,27 +405,20 @@ namespace ReClassNET.Memory
 			return null;
 		}
 
-		public void EnumerateRemoteSectionsAndModules(Action<Section> callbackSection, Action<Module> callbackModule)
+		public bool EnumerateRemoteSectionsAndModules(out List<Section> _sections, out List<Module> _modules)
 		{
 			if (!IsValid)
 			{
-				return;
-			}
-
-			coreFunctions.EnumerateRemoteSectionsAndModules(handle, callbackSection, callbackModule);
-		}
-
-		public bool EnumerateRemoteSectionsAndModules(out List<Section> sections, out List<Module> modules)
-		{
-			if (!IsValid)
-			{
-				sections = null;
-				modules = null;
+				_sections = null;
+				_modules = null;
 
 				return false;
 			}
 
-			coreFunctions.EnumerateRemoteSectionsAndModules(handle, out sections, out modules);
+			_sections = new List<Section>();
+			_modules = new List<Module>();
+
+			coreFunctions.EnumerateRemoteSectionsAndModules(handle, _sections.Add, _modules.Add);
 
 			return true;
 		}
@@ -674,11 +437,11 @@ namespace ReClassNET.Memory
 
 			if (!IsValid)
 			{
-				lock(modules)
+				lock (modules)
 				{
 					modules.Clear();
 				}
-				lock(sections)
+				lock (sections)
 				{
 					sections.Clear();
 				}
@@ -715,26 +478,23 @@ namespace ReClassNET.Memory
 		{
 			Contract.Requires(addressFormula != null);
 
-			var reader = new TokenReader();
-			var tokens = reader.Read(addressFormula);
-
-			var astBuilder = new AstBuilder();
-			var operation = astBuilder.Build(tokens);
-
-			if (operation == null)
+			if (!formulaCache.TryGetValue(addressFormula, out var func))
 			{
-				return IntPtr.Zero;
+				var expression = Parser.Parse(addressFormula);
+
+				func = DynamicCompiler.CompileExpression(expression);
+
+				formulaCache.Add(addressFormula, func);
 			}
 
-			var interpreter = new Interpreter();
-			return interpreter.Execute(operation, this);
+			return func(this);
 		}
 
 		/// <summary>Loads all symbols asynchronous.</summary>
 		/// <param name="progress">The progress reporter is called for every module. Can be null.</param>
 		/// <param name="token">The token used to cancel the task.</param>
 		/// <returns>The task.</returns>
-		public Task LoadAllSymbolsAsync(IProgress<Tuple<Module, IEnumerable<Module>>> progress, CancellationToken token)
+		public Task LoadAllSymbolsAsync(IProgress<Tuple<Module, IReadOnlyList<Module>>> progress, CancellationToken token)
 		{
 			List<Module> copy;
 			lock (modules)
@@ -752,7 +512,7 @@ namespace ReClassNET.Memory
 					{
 						token.ThrowIfCancellationRequested();
 
-						progress?.Report(Tuple.Create<Module, IEnumerable<Module>>(module, copy));
+						progress?.Report(Tuple.Create<Module, IReadOnlyList<Module>>(module, copy));
 
 						Symbols.TryResolveSymbolsForModule(module);
 					}

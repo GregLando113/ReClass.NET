@@ -1,4 +1,6 @@
-﻿using System.Drawing;
+using System.Drawing;
+using ReClassNET.Controls;
+using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
 
@@ -8,9 +10,15 @@ namespace ReClassNET.Nodes
 	{
 		public override int MemorySize => 4;
 
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			return DrawNumeric(view, x, y, Icons.Float, "Float", ReadValueFromMemory(view.Memory).ToString("0.000"), null);
+			name = "Float";
+			icon = Properties.Resources.B16x16_Button_Float;
+		}
+
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			return DrawNumeric(context, x, y, context.IconProvider.Float, "Float", ReadValueFromMemory(context.Memory).ToString("0.000"), null);
 		}
 
 		public override void Update(HotSpot spot)
@@ -21,7 +29,7 @@ namespace ReClassNET.Nodes
 			{
 				if (float.TryParse(spot.Text, out var val))
 				{
-					spot.Memory.Process.WriteRemoteMemory(spot.Address, val);
+					spot.Process.WriteRemoteMemory(spot.Address, val);
 				}
 			}
 		}

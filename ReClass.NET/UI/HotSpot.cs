@@ -11,11 +11,13 @@ namespace ReClassNET.UI
 		Edit,
 		OpenClose,
 		Select,
-		Drop,
 		Click,
-		ChangeType,
+		DoubleClick,
+		ChangeClassType,
+		ChangeWrappedType,
+		ChangeEnumType,
+		Context,
 		Delete,
-		RTTI,
 		Address,
 		Name,
 		Comment
@@ -39,6 +41,8 @@ namespace ReClassNET.UI
 		public Rectangle Rect { get; set; }
 
 		public IntPtr Address { get; set; }
+
+		public RemoteProcess Process { get; set; }
 
 		public MemoryBuffer Memory { get; set; }
 	}

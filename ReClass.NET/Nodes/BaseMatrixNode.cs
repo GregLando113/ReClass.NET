@@ -1,5 +1,8 @@
-﻿using System.Diagnostics.Contracts;
+using System;
+using System.Diagnostics.Contracts;
 using System.Drawing;
+using ReClassNET.Controls;
+using ReClassNET.Extensions;
 using ReClassNET.UI;
 
 namespace ReClassNET.Nodes
@@ -11,115 +14,149 @@ namespace ReClassNET.Nodes
 
 		protected BaseMatrixNode()
 		{
-			levelsOpen.DefaultValue = true;
+			LevelsOpen.DefaultValue = true;
 		}
 
 		protected delegate void DrawMatrixValues(int x, ref int maxX, ref int y);
 
-		protected Size DrawMatrixType(ViewInfo view, int x, int y, string type, DrawMatrixValues drawValues)
+		protected Size DrawMatrixType(DrawContext context, int x, int y, string type, int rows, int columns)
 		{
-			Contract.Requires(view != null);
+			Contract.Requires(context != null);
 			Contract.Requires(type != null);
-			Contract.Requires(drawValues != null);
 
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
-
-			DrawInvalidMemoryIndicator(view, y);
 
 			var origX = x;
 			var origY = y;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding;
+			x = AddIconPadding(context, x);
 
-			x = AddIcon(view, x, y, Icons.Matrix, HotSpot.NoneId, HotSpotType.None);
+			x = AddIcon(context, x, y, context.IconProvider.Matrix, HotSpot.NoneId, HotSpotType.None);
 
 			var tx = x;
 
-			x = AddAddressOffset(view, x, y);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, type) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name);
-			x = AddOpenClose(view, x, y);
-
-			x += view.Font.Width;
-
-			x = AddComment(view, x, y);
-
-			if (levelsOpen[view.Level])
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, type) + context.Font.Width;
+			if (!IsWrapped)
 			{
-				drawValues(tx, ref x, ref y);
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name);
+			}
+			x = AddOpenCloseIcon(context, x, y);
+
+			x += context.Font.Width;
+
+			x = AddComment(context, x, y);
+
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
+
+			if (LevelsOpen[context.Level])
+			{
+				var index = 0;
+				for (var row = 0; row < rows; ++row)
+				{
+					y += context.Font.Height;
+					var x2 = tx;
+
+					x2 = AddText(context, x2, y, context.Settings.NameColor, HotSpot.NoneId, "|");
+
+					for (var column = 0; column < columns; ++column)
+					{
+						var value = context.Memory.ReadFloat(Offset + index * sizeof(float));
+						x2 = AddText(context, x2, y, context.Settings.ValueColor, index, $"{value,14:0.000}");
+
+						index++;
+					}
+
+					x2 = AddText(context, x2, y, context.Settings.NameColor, HotSpot.NoneId, "|");
+
+					x = Math.Max(x2, x);
+				}
 			}
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
-
-			return new Size(x - origX, y - origY + view.Font.Height);
+			return new Size(x - origX, y - origY + context.Font.Height);
 		}
 
 		protected delegate void DrawVectorValues(ref int x, ref int y);
-		protected Size DrawVectorType(ViewInfo view, int x, int y, string type, DrawVectorValues drawValues)
+		protected Size DrawVectorType(DrawContext context, int x, int y, string type, int columns)
 		{
-			Contract.Requires(view != null);
+			Contract.Requires(context != null);
 			Contract.Requires(type != null);
-			Contract.Requires(drawValues != null);
 
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
 
-			DrawInvalidMemoryIndicator(view, y);
+			DrawInvalidMemoryIndicatorIcon(context, y);
 
 			var origX = x;
 			var origY = y;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding;
+			x = AddIconPadding(context, x);
 
-			x = AddIcon(view, x, y, Icons.Vector, HotSpot.NoneId, HotSpotType.None);
-			x = AddAddressOffset(view, x, y);
+			x = AddIcon(context, x, y, context.IconProvider.Vector, HotSpot.NoneId, HotSpotType.None);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, type) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name);
-			x = AddOpenClose(view, x, y);
-
-			if (levelsOpen[view.Level])
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, type) + context.Font.Width;
+			if (!IsWrapped)
 			{
-				drawValues(ref x, ref y);
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name);
+			}
+			x = AddOpenCloseIcon(context, x, y);
+
+			if (LevelsOpen[context.Level])
+			{
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NoneId, "(");
+				for (var column = 0; column < columns; ++column)
+				{
+					var value = context.Memory.ReadFloat(Offset + column * sizeof(float));
+
+					x = AddText(context, x, y, context.Settings.ValueColor, column, $"{value:0.000}");
+
+					if (column < columns - 1)
+					{
+						x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NoneId, ",");
+					}
+				}
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NoneId, ")");
 			}
 
-			x += view.Font.Width;
+			x += context.Font.Width;
 
-			x = AddComment(view, x, y);
+			x = AddComment(context, x, y);
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
 
-			return new Size(x - origX, y - origY + view.Font.Height);
+			return new Size(x - origX, y - origY + context.Font.Height);
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
 				return HiddenHeight;
 			}
 
-			var height = view.Font.Height;
-			if (levelsOpen[view.Level])
+			var height = context.Font.Height;
+			if (LevelsOpen[context.Level])
 			{
-				height += CalculateValuesHeight(view);
+				height += CalculateValuesHeight(context);
 			}
 			return height;
 		}
 
-		protected abstract int CalculateValuesHeight(ViewInfo view);
+		protected abstract int CalculateValuesHeight(DrawContext context);
 
 		public void Update(HotSpot spot, int max)
 		{
@@ -131,7 +168,7 @@ namespace ReClassNET.Nodes
 			{
 				if (float.TryParse(spot.Text, out var val))
 				{
-					spot.Memory.Process.WriteRemoteMemory(spot.Address + spot.Id * ValueTypeSize, val);
+					spot.Process.WriteRemoteMemory(spot.Address + spot.Id * ValueTypeSize, val);
 				}
 			}
 		}

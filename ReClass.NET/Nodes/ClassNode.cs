@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Linq;
-using ReClassNET.AddressParser;
-using ReClassNET.Extensions;
-using ReClassNET.Memory;
+using ReClassNET.Controls;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
@@ -19,36 +15,19 @@ namespace ReClassNET.Nodes
 
 #if RECLASSNET64
 		public static IntPtr DefaultAddress { get; } = (IntPtr)0x140000000;
+		public static string DefaultAddressFormula { get; } = "140000000";
 #else
 		public static IntPtr DefaultAddress { get; } = (IntPtr)0x400000;
+		public static string DefaultAddressFormula { get; } = "400000";
 #endif
 
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => Nodes.Sum(n => n.MemorySize);
 
-		private NodeUuid uuid;
-		public NodeUuid Uuid
-		{
-			get => uuid;
-			set
-			{
-				Contract.Requires(value != null);
+		protected override bool ShouldCompensateSizeChanges => true;
 
-				uuid = value;
-			}
-		}
+		public Guid Uuid { get; set; }
 
-		public IntPtr Address
-		{
-			set
-			{
-				Contract.Ensures(AddressFormula != null);
-
-				AddressFormula = value.ToString("X");
-			}
-		}
-
-		public string AddressFormula { get; set; }
+		public string AddressFormula { get; set; } = DefaultAddressFormula;
 
 		public event NodeEventHandler NodesChanged;
 
@@ -56,9 +35,9 @@ namespace ReClassNET.Nodes
 		{
 			Contract.Ensures(AddressFormula != null);
 
-			Uuid = new NodeUuid(true);
+			LevelsOpen.DefaultValue = true;
 
-			Address = DefaultAddress;
+			Uuid = Guid.NewGuid();
 
 			if (notifyClassCreated)
 			{
@@ -73,85 +52,98 @@ namespace ReClassNET.Nodes
 			return new ClassNode(true);
 		}
 
-		public override void Intialize()
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
+		{
+			throw new InvalidOperationException($"The '{nameof(ClassNode)}' node should not be accessible from the ui.");
+		}
+
+		public override bool CanHandleChildNode(BaseNode node)
+		{
+			switch (node)
+			{
+				case null:
+				case ClassNode _:
+				case VirtualMethodNode _:
+					return false;
+			}
+
+			return true;
+		}
+
+		public override void Initialize()
 		{
 			AddBytes(IntPtr.Size);
 		}
 
-		public override void ClearSelection()
+		public override Size Draw(DrawContext context, int x, int y)
 		{
-			base.ClearSelection();
-
-			foreach (var node in Nodes)
-			{
-				node.ClearSelection();
-			}
-		}
-
-		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
-		/// <param name="x">The x coordinate.</param>
-		/// <param name="y">The y coordinate.</param>
-		/// <returns>The pixel size the node occupies.</returns>
-		public override Size Draw(ViewInfo view, int x, int y)
-		{
-			AddSelection(view, 0, y, view.Font.Height);
+			AddSelection(context, 0, y, context.Font.Height);
 
 			var origX = x;
 			var origY = y;
 
-			x = AddOpenClose(view, x, y);
+			x = AddOpenCloseIcon(context, x, y);
 
 			var tx = x;
 
-			x = AddIcon(view, x, y, Icons.Class, -1, HotSpotType.None);
-			x = AddText(view, x, y, view.Settings.OffsetColor, 0, AddressFormula) + view.Font.Width;
+			x = AddIcon(context, x, y, context.IconProvider.Class, HotSpot.NoneId, HotSpotType.None);
+			x = AddText(context, x, y, context.Settings.OffsetColor, 0, AddressFormula) + context.Font.Width;
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, "Class") + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.ValueColor, HotSpot.NoneId, $"[{MemorySize}]") + view.Font.Width;
-			x = AddComment(view, x, y);
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, "Class") + context.Font.Width;
+			x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name) + context.Font.Width;
+			x = AddText(context, x, y, context.Settings.ValueColor, HotSpot.NoneId, $"[{MemorySize}]") + context.Font.Width;
+			x = AddComment(context, x, y);
 
-			y += view.Font.Height;
+			y += context.Font.Height;
 
 			var size = new Size(x - origX, y - origY);
 
-			if (levelsOpen[view.Level])
+			if (LevelsOpen[context.Level])
 			{
 				var childOffset = tx - origX;
 
-				var nv = view.Clone();
-				nv.Level++;
+				var innerContext = context.Clone();
+				innerContext.Level++;
 				foreach (var node in Nodes)
 				{
-					// Draw the node if it is in the visible area.
-					if (view.ClientArea.Contains(tx, y))
+					Size AggregateNodeSizes(Size baseSize, Size newSize)
 					{
-						var innerSize = node.Draw(nv, tx, y);
+						return new Size(Math.Max(baseSize.Width, newSize.Width), baseSize.Height + newSize.Height);
+					}
 
-						size = Utils.AggregateNodeSizes(size, innerSize.Extend(childOffset, 0));
+					Size ExtendWidth(Size baseSize, int width)
+					{
+						return new Size(baseSize.Width + width, baseSize.Height);
+					}
+
+					// Draw the node if it is in the visible area.
+					if (context.ClientArea.Contains(tx, y))
+					{
+						var innerSize = node.Draw(innerContext, tx, y);
+
+						size = AggregateNodeSizes(size, ExtendWidth(innerSize, childOffset));
 
 						y += innerSize.Height;
 					}
 					else
 					{
 						// Otherwise calculate the height...
-						var calculatedHeight = node.CalculateDrawnHeight(nv);
+						var calculatedHeight = node.CalculateDrawnHeight(innerContext);
 
 						// and check if the node area overlaps with the visible area...
-						if (new Rectangle(tx, y, 9999999, calculatedHeight).IntersectsWith(view.ClientArea))
+						if (new Rectangle(tx, y, 9999999, calculatedHeight).IntersectsWith(context.ClientArea))
 						{
 							// then draw the node...
-							var innerSize = node.Draw(nv, tx, y);
+							var innerSize = node.Draw(innerContext, tx, y);
 
-							size = Utils.AggregateNodeSizes(size, innerSize.Extend(childOffset, 0));
+							size = AggregateNodeSizes(size, ExtendWidth(innerSize, childOffset));
 
 							y += innerSize.Height;
 						}
 						else
 						{
 							// or skip drawing and just use the calculated height.
-							size = Utils.AggregateNodeSizes(size, new Size(0, calculatedHeight));
+							size = AggregateNodeSizes(size, new Size(0, calculatedHeight));
 
 							y += calculatedHeight;
 						}
@@ -162,17 +154,17 @@ namespace ReClassNET.Nodes
 			return size;
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
 			if (IsHidden)
 			{
 				return HiddenHeight;
 			}
 
-			var height = view.Font.Height;
-			if (levelsOpen[view.Level])
+			var height = context.Font.Height;
+			if (LevelsOpen[context.Level])
 			{
-				var nv = view.Clone();
+				var nv = context.Clone();
 				nv.Level++;
 				height += Nodes.Sum(n => n.CalculateDrawnHeight(nv));
 			}
@@ -185,65 +177,8 @@ namespace ReClassNET.Nodes
 
 			if (spot.Id == 0)
 			{
-				Offset = spot.Memory.Process.ParseAddress(spot.Text);
-
 				AddressFormula = spot.Text;
 			}
-		}
-
-		public void UpdateAddress(RemoteProcess process)
-		{
-			Contract.Requires(process != null);
-
-			try
-			{
-				Offset = process.ParseAddress(AddressFormula);
-			}
-			catch (ParseException)
-			{
-				Offset = IntPtr.Zero;
-			}
-		}
-
-		public override void InsertBytes(int index, int size, ref List<BaseNode> createdNodes)
-		{
-			base.InsertBytes(index, size, ref createdNodes);
-
-			ChildHasChanged(null);
-		}
-
-		public override void InsertNode(int index, BaseNode node)
-		{
-			if (node is ClassNode || node is VMethodNode)
-			{
-				return;
-			}
-
-			base.InsertNode(index, node);
-
-			ChildHasChanged(node);
-		}
-
-		public override bool RemoveNode(BaseNode node)
-		{
-			var removed = base.RemoveNode(node);
-			if (removed)
-			{
-				UpdateOffsets();
-
-				ChildHasChanged(node);
-			}
-			return removed;
-		}
-
-		public override bool ReplaceChildNode(int index, Type nodeType, ref List<BaseNode> createdNodes)
-		{
-			var replaced = base.ReplaceChildNode(index, nodeType, ref createdNodes);
-			if (replaced)
-			{
-				ChildHasChanged(null); //TODO
-			}
-			return replaced;
 		}
 
 		protected internal override void ChildHasChanged(BaseNode child)

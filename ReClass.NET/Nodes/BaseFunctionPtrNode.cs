@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Linq;
+using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
@@ -13,111 +13,113 @@ namespace ReClassNET.Nodes
 	{
 		public override int MemorySize => IntPtr.Size;
 
-		public override string GetToolTipText(HotSpot spot, MemoryBuffer memory)
+		public override string GetToolTipText(HotSpot spot)
 		{
-			var ptr = memory.ReadIntPtr(Offset);
+			var ptr = spot.Memory.ReadIntPtr(Offset);
 
-			DisassembleRemoteCode(memory, ptr);
+			DisassembleRemoteCode(spot.Process, ptr);
 
-			return string.Join("\n", instructions.Select(i => i.Instruction));
+			return string.Join("\n", Instructions.Select(i => i.Instruction));
 		}
 
-		protected Size Draw(ViewInfo view, int x, int y, string type, string name)
+		protected Size Draw(DrawContext context, int x, int y, string type, string name)
 		{
-			Contract.Requires(view != null);
+			Contract.Requires(context != null);
 			Contract.Requires(type != null);
 			Contract.Requires(name != null);
 
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
-
-			DrawInvalidMemoryIndicator(view, y);
 
 			var origX = x;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding;
+			x = AddIconPadding(context, x);
 
-			x = AddIcon(view, x, y, Icons.Function, -1, HotSpotType.None);
+			x = AddIcon(context, x, y, context.IconProvider.Function, HotSpot.NoneId, HotSpotType.None);
 
 			var tx = x;
 
-			x = AddAddressOffset(view, x, y);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, type) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, name) + view.Font.Width;
-
-			x = AddOpenClose(view, x, y) + view.Font.Width;
-
-			x = AddComment(view, x, y);
-
-			if (view.Settings.ShowCommentSymbol)
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, type) + context.Font.Width;
+			if (!IsWrapped)
 			{
-				var value = view.Memory.ReadIntPtr(Offset);
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, name) + context.Font.Width;
+			}
 
-				var module = view.Memory.Process.GetModuleToPointer(value);
+			x = AddOpenCloseIcon(context, x, y) + context.Font.Width;
+
+			x = AddComment(context, x, y);
+
+			if (context.Settings.ShowCommentSymbol)
+			{
+				var value = context.Memory.ReadIntPtr(Offset);
+
+				var module = context.Process.GetModuleToPointer(value);
 				if (module != null)
 				{
-					var symbols = view.Memory.Process.Symbols.GetSymbolsForModule(module);
+					var symbols = context.Process.Symbols.GetSymbolsForModule(module);
 					var symbol = symbols?.GetSymbolString(value, module);
 					if (!string.IsNullOrEmpty(symbol))
 					{
-						x = AddText(view, x, y, view.Settings.OffsetColor, HotSpot.ReadOnlyId, symbol);
+						x = AddText(context, x, y, context.Settings.OffsetColor, HotSpot.ReadOnlyId, symbol);
 					}
 				}
 			}
 
-			var size = new Size(x - origX, view.Font.Height);
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
 
-			if (levelsOpen[view.Level])
+			var size = new Size(x - origX, context.Font.Height);
+
+			if (LevelsOpen[context.Level])
 			{
-				var ptr = view.Memory.ReadIntPtr(Offset);
+				var ptr = context.Memory.ReadIntPtr(Offset);
 
-				DisassembleRemoteCode(view.Memory, ptr);
+				DisassembleRemoteCode(context.Process, ptr);
 
-				var instructionSize = DrawInstructions(view, tx, y);
+				var instructionSize = DrawInstructions(context, tx, y);
 
 				size.Width = Math.Max(size.Width, instructionSize.Width + tx - origX);
 				size.Height += instructionSize.Height;
 			}
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
-
 			return size;
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
 			if (IsHidden)
 			{
 				return HiddenHeight;
 			}
 
-			var height = view.Font.Height;
-			if (levelsOpen[view.Level])
+			var height = context.Font.Height;
+			if (LevelsOpen[context.Level])
 			{
-				height += instructions.Count * view.Font.Height;
+				height += Instructions.Count * context.Font.Height;
 			}
 			return height;
 		}
 
-		private void DisassembleRemoteCode(MemoryBuffer memory, IntPtr address)
+		private void DisassembleRemoteCode(RemoteProcess process, IntPtr address)
 		{
-			Contract.Requires(memory != null);
+			Contract.Requires(process != null);
 
-			if (this.address != address)
+			if (this.Address != address)
 			{
-				instructions.Clear();
+				Instructions.Clear();
 
-				this.address = address;
+				this.Address = address;
 
-				if (!address.IsNull() && memory.Process.IsValid)
+				if (!address.IsNull() && process.IsValid)
 				{
-					DisassembleRemoteCode(memory, address, out _);
+					DisassembleRemoteCode(process, address, out _);
 				}
 			}
 		}

@@ -1,53 +1,58 @@
-﻿using System.Drawing;
+using System.Drawing;
+using ReClassNET.Controls;
+using ReClassNET.Extensions;
 using ReClassNET.UI;
 
 namespace ReClassNET.Nodes
 {
 	public class BoolNode : BaseNumericNode
 	{
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => 1;
 
-		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
-		/// <param name="x">The x coordinate.</param>
-		/// <param name="y">The y coordinate.</param>
-		/// <returns>The pixel size the node occupies.</returns>
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			if (IsHidden)
-			{
-				return DrawHidden(view, x, y);
-			}
+			name = "Bool";
+			icon = Properties.Resources.B16x16_Button_Bool;
+		}
 
-			DrawInvalidMemoryIndicator(view, y);
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			if (IsHidden && !IsWrapped)
+			{
+				return DrawHidden(context, x, y);
+			}
 
 			var origX = x;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding + Icons.Dimensions;
+			x = AddIconPadding(context, x);
+			x = AddIconPadding(context, x);
 
-			x = AddAddressOffset(view, x, y);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, "Bool") + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NoneId, "=") + view.Font.Width;
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, "Bool") + context.Font.Width;
+			if (!IsWrapped)
+			{
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name) + context.Font.Width;
+			}
+			x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NoneId, "=") + context.Font.Width;
 
-			var value = view.Memory.ReadUInt8(Offset);
-			x = AddText(view, x, y, view.Settings.ValueColor, 0, value == 0 ? "false" : "true") + view.Font.Width;
+			var value = context.Memory.ReadUInt8(Offset);
+			x = AddText(context, x, y, context.Settings.ValueColor, 0, value == 0 ? "false" : "true") + context.Font.Width;
 
-			x = AddComment(view, x, y);
+			x = AddComment(context, x, y);
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
 
-			return new Size(x - origX, view.Font.Height);
+			return new Size(x - origX, context.Font.Height);
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			return IsHidden ? HiddenHeight : view.Font.Height;
+			return IsHidden && !IsWrapped ? HiddenHeight : context.Font.Height;
 		}
 
 		/// <summary>Updates the node from the given spot and sets the value.</summary>
@@ -60,7 +65,7 @@ namespace ReClassNET.Nodes
 			{
 				if (bool.TryParse(spot.Text, out var val))
 				{
-					spot.Memory.Process.WriteRemoteMemory(spot.Address, (byte)(val ? 1 : 0));
+					spot.Process.WriteRemoteMemory(spot.Address, (byte)(val ? 1 : 0));
 				}
 			}
 		}

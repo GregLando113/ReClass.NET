@@ -1,8 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using System.Drawing;
-using System.Globalization;
+using System.Linq;
 
 namespace ReClassNET.Util
 {
@@ -34,7 +33,7 @@ namespace ReClassNET.Util
 			return Max(item1, item2, keySelector, Comparer<U>.Default);
 		}
 
-		public static T Max<T, U>(T item1, T item2, Func<T, U> keySelector, IComparer<U> comparer)
+		public static T1 Max<T1, T2>(T1 item1, T1 item2, Func<T1, T2> keySelector, IComparer<T2> comparer)
 		{
 			Contract.Requires(keySelector != null);
 			Contract.Requires(comparer != null);
@@ -53,68 +52,12 @@ namespace ReClassNET.Util
 			rhs = temp;
 		}
 
-		public static Size AggregateNodeSizes(Size baseSize, Size newSize)
+		//thx again stack overflow https://stackoverflow.com/a/1344242
+		public static string RandomString(int length)
 		{
-			return new Size(Math.Max(baseSize.Width, newSize.Width), baseSize.Height + newSize.Height);
-		}
-
-		public static NumberFormatInfo GuessNumberFormat(string input)
-		{
-			Contract.Requires(input != null);
-			Contract.Ensures(Contract.Result<NumberFormatInfo>() != null);
-
-			if (input.Contains(",") && !input.Contains("."))
-			{
-				return new NumberFormatInfo
-				{
-					NumberDecimalSeparator = ",",
-					NumberGroupSeparator = "."
-				};
-			}
-			return new NumberFormatInfo
-			{
-				NumberDecimalSeparator = ".",
-				NumberGroupSeparator = ","
-			};
-		}
-
-		private static readonly uint[] hexLookup = CreateHexLookup();
-
-		private static uint[] CreateHexLookup()
-		{
-			var result = new uint[256];
-			for (var i = 0; i < 256; i++)
-			{
-				var s = i.ToString("X2");
-				result[i] = (uint)s[0] + ((uint)s[1] << 16);
-			}
-			return result;
-		}
-
-		public static string ByteArrayToHexString(byte[] data)
-		{
-			Contract.Requires(data != null);
-
-			if (data.Length == 0)
-			{
-				return string.Empty;
-			}
-
-			var lookup = hexLookup;
-			var result = new char[data.Length * 2 + data.Length - 1];
-
-			var val = lookup[data[0]];
-			result[0] = (char)val;
-			result[1] = (char)(val >> 16);
-
-			for (var i = 1; i < data.Length; i++)
-			{
-				val = lookup[data[i]];
-				result[3 * i - 1] = ' ';
-				result[3 * i] = (char)val;
-				result[3 * i + 1] = (char)(val >> 16);
-			}
-			return new string(result);
+			const string Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+			return new string(Enumerable.Repeat(Chars, length)
+			  .Select(s => s[Program.GlobalRandom.Next(s.Length)]).ToArray());
 		}
 	}
 }

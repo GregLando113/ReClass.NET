@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Diagnostics.Contracts;
 using System.Globalization;
@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using ReClassNET.Controls;
 using ReClassNET.DataExchange.Scanner;
 using ReClassNET.Extensions;
 using ReClassNET.Logger;
@@ -27,6 +28,8 @@ namespace ReClassNET.Forms
 
 		private const int MaxVisibleResults = 10000;
 
+		private readonly RemoteProcess process;
+
 		private bool isFirstScan;
 
 		private Scanner scanner;
@@ -34,8 +37,12 @@ namespace ReClassNET.Forms
 
 		private string addressFilePath;
 
-		public ScannerForm()
+		public ScannerForm(RemoteProcess process)
 		{
+			Contract.Requires(process != null);
+
+			this.process = process;
+
 			InitializeComponent();
 
 			toolStripPanel.Renderer = new CustomToolStripProfessionalRenderer(true, false);
@@ -47,10 +54,10 @@ namespace ReClassNET.Forms
 
 			Reset();
 
-			firstScanButton.Enabled = flowLayoutPanel.Enabled = Program.RemoteProcess.IsValid;
+			firstScanButton.Enabled = flowLayoutPanel.Enabled = process.IsValid;
 
-			Program.RemoteProcess.ProcessAttached += RemoteProcessOnProcessAttached;
-			Program.RemoteProcess.ProcessClosing += RemoteProcessOnProcessClosing;
+			process.ProcessAttached += RemoteProcessOnProcessAttached;
+			process.ProcessClosing += RemoteProcessOnProcessClosing;
 		}
 
 		protected override void OnLoad(EventArgs e)
@@ -85,8 +92,8 @@ namespace ReClassNET.Forms
 				{
 					foreach (var record in addressListMemoryRecordList.Records)
 					{
-						record.ResolveAddress(Program.RemoteProcess);
-						record.RefreshValue(Program.RemoteProcess);
+						record.ResolveAddress(process);
+						record.RefreshValue(process);
 					}
 				}
 			}
@@ -103,14 +110,14 @@ namespace ReClassNET.Forms
 		{
 			scanner?.Dispose();
 
-			Program.RemoteProcess.ProcessAttached -= RemoteProcessOnProcessAttached;
-			Program.RemoteProcess.ProcessClosing -= RemoteProcessOnProcessClosing;
+			process.ProcessAttached -= RemoteProcessOnProcessAttached;
+			process.ProcessClosing -= RemoteProcessOnProcessClosing;
 		}
 
 		private void updateValuesTimer_Tick(object sender, EventArgs e)
 		{
-			resultMemoryRecordList.RefreshValues(Program.RemoteProcess);
-			addressListMemoryRecordList.RefreshValues(Program.RemoteProcess);
+			resultMemoryRecordList.RefreshValues(process);
+			addressListMemoryRecordList.RefreshValues(process);
 		}
 
 		private void scanTypeComboBox_SelectionChangeCommitted(object sender, EventArgs e)
@@ -147,7 +154,7 @@ namespace ReClassNET.Forms
 
 		private async void nextScanButton_Click(object sender, EventArgs e)
 		{
-			if (!Program.RemoteProcess.IsValid)
+			if (!process.IsValid)
 			{
 				return;
 			}
@@ -200,58 +207,60 @@ namespace ReClassNET.Forms
 
 		private void openAddressFileToolStripButton_Click(object sender, EventArgs e)
 		{
-			using (var ofd = new OpenFileDialog())
+			using var ofd = new OpenFileDialog
 			{
-				ofd.CheckFileExists = true;
-				ofd.Filter = $"All Scanner Types |*{ReClassScanFile.FileExtension};*{CheatEngineFile.FileExtension};*{CrySearchFile.FileExtension}"
-							+ $"|{ReClassScanFile.FormatName} (*{ReClassScanFile.FileExtension})|*{ReClassScanFile.FileExtension}"
-							+ $"|{CheatEngineFile.FormatName} (*{CheatEngineFile.FileExtension})|*{CheatEngineFile.FileExtension}"
-							+ $"|{CrySearchFile.FormatName} (*{CrySearchFile.FileExtension})|*{CrySearchFile.FileExtension}";
+				CheckFileExists = true,
+				Filter = $"All Scanner Types |*{ReClassScanFile.FileExtension};*{CheatEngineFile.FileExtension};*{CrySearchFile.FileExtension}"
+				         + $"|{ReClassScanFile.FormatName} (*{ReClassScanFile.FileExtension})|*{ReClassScanFile.FileExtension}"
+				         + $"|{CheatEngineFile.FormatName} (*{CheatEngineFile.FileExtension})|*{CheatEngineFile.FileExtension}"
+				         + $"|{CrySearchFile.FormatName} (*{CrySearchFile.FileExtension})|*{CrySearchFile.FileExtension}"
+			};
 
-				if (ofd.ShowDialog() == DialogResult.OK)
+			if (ofd.ShowDialog() == DialogResult.OK)
+			{
+				IScannerImport import = null;
+				switch (Path.GetExtension(ofd.FileName)?.ToLower())
 				{
-					IScannerImport import = null;
-					switch (Path.GetExtension(ofd.FileName)?.ToLower())
-					{
-						case ReClassScanFile.FileExtension:
-							import = new ReClassScanFile();
-							break;
-						case CheatEngineFile.FileExtension:
-							import = new CheatEngineFile();
-							break;
-						case CrySearchFile.FileExtension:
-							import = new CrySearchFile();
-							break;
-						default:
-							Program.Logger.Log(LogLevel.Error, $"The file '{ofd.FileName}' has an unknown type.");
-							break;
-					}
-					if (import != null)
-					{
-						if (addressListMemoryRecordList.Records.Any())
-						{
-							if (MessageBox.Show("The address list contains addresses. Do you really want to open the file?", $"{Constants.ApplicationName} Scanner", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-							{
-								return;
-							}
-						}
+					case ReClassScanFile.FileExtension:
+						import = new ReClassScanFile();
+						break;
+					case CheatEngineFile.FileExtension:
+						import = new CheatEngineFile();
+						break;
+					case CrySearchFile.FileExtension:
+						import = new CrySearchFile();
+						break;
+					default:
+						Program.Logger.Log(LogLevel.Error, $"The file '{ofd.FileName}' has an unknown type.");
+						break;
+				}
+				if (import == null)
+				{
+					return;
+				}
 
-						if (import is ReClassScanFile)
-						{
-							addressFilePath = ofd.FileName;
-						}
-
-						addressListMemoryRecordList.SetRecords(
-							import.Load(ofd.FileName, Program.Logger)
-								.Select(r =>
-								{
-									r.ResolveAddress(Program.RemoteProcess);
-									r.RefreshValue(Program.RemoteProcess);
-									return r;
-								})
-						);
+				if (addressListMemoryRecordList.Records.Any())
+				{
+					if (MessageBox.Show("The address list contains addresses. Do you really want to open the file?", $"{Constants.ApplicationName} Scanner", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+					{
+						return;
 					}
 				}
+
+				if (import is ReClassScanFile)
+				{
+					addressFilePath = ofd.FileName;
+				}
+
+				addressListMemoryRecordList.SetRecords(
+					import.Load(ofd.FileName, Program.Logger)
+						.Select(r =>
+						{
+							r.ResolveAddress(process);
+							r.RefreshValue(process);
+							return r;
+						})
+				);
 			}
 		}
 
@@ -280,17 +289,17 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			using (var sfd = new SaveFileDialog())
+			using var sfd = new SaveFileDialog
 			{
-				sfd.DefaultExt = ReClassScanFile.FileExtension;
-				sfd.Filter = $"{ReClassScanFile.FormatName} (*{ReClassScanFile.FileExtension})|*{ReClassScanFile.FileExtension}";
+				DefaultExt = ReClassScanFile.FileExtension,
+				Filter = $"{ReClassScanFile.FormatName} (*{ReClassScanFile.FileExtension})|*{ReClassScanFile.FileExtension}"
+			};
 
-				if (sfd.ShowDialog() == DialogResult.OK)
-				{
-					addressFilePath = sfd.FileName;
+			if (sfd.ShowDialog() == DialogResult.OK)
+			{
+				addressFilePath = sfd.FileName;
 
-					saveAddressFileToolStripButton_Click(sender, e);
-				}
+				saveAddressFileToolStripButton_Click(sender, e);
 			}
 		}
 
@@ -301,7 +310,7 @@ namespace ReClassNET.Forms
 
 		private void showInputCorrelatorIconButton_Click(object sender, EventArgs e)
 		{
-			new InputCorrelatorForm(this).Show();
+			new InputCorrelatorForm(this, process).Show();
 		}
 
 		private void resultListContextMenuStrip_Opening(object sender, CancelEventArgs e)
@@ -415,7 +424,7 @@ namespace ReClassNET.Forms
 					.Select(r =>
 					{
 						var record = new MemoryRecord(r);
-						record.ResolveAddress(Program.RemoteProcess);
+						record.ResolveAddress(process);
 						return record;
 					})
 			);
@@ -448,6 +457,7 @@ namespace ReClassNET.Forms
 				case ScanValueType.Double:
 				case ScanValueType.ArrayOfBytes:
 				case ScanValueType.String:
+				case ScanValueType.Regex:
 					isHexCheckBox.Checked = false;
 					enableHexCheckBox = false;
 					break;
@@ -479,6 +489,7 @@ namespace ReClassNET.Forms
 				case ScanValueType.Double:
 				case ScanValueType.ArrayOfBytes:
 				case ScanValueType.String:
+				case ScanValueType.Regex:
 					isHexCheckBox.Checked = false;
 					isHexCheckBox.Enabled = false;
 					break;
@@ -500,7 +511,7 @@ namespace ReClassNET.Forms
 			fastScanAlignmentTextBox.Text = alignment.ToString();
 
 			floatingOptionsGroupBox.Visible = valueType == ScanValueType.Float || valueType == ScanValueType.Double;
-			stringOptionsGroupBox.Visible = valueType == ScanValueType.String;
+			stringOptionsGroupBox.Visible = valueType == ScanValueType.String || valueType == ScanValueType.Regex;
 		}
 
 		/// <summary>
@@ -510,7 +521,7 @@ namespace ReClassNET.Forms
 		{
 			var compareType = compareTypeComboBox.SelectedValue;
 			var valueType = valueTypeComboBox.SelectedValue;
-			if (valueType == ScanValueType.ArrayOfBytes || valueType == ScanValueType.String)
+			if (valueType == ScanValueType.ArrayOfBytes || valueType == ScanValueType.String || valueType == ScanValueType.Regex)
 			{
 				compareTypeComboBox.SetAvailableValues(ScanCompareType.Equal);
 			}
@@ -586,7 +597,7 @@ namespace ReClassNET.Forms
 		/// <param name="comparer">The comparer.</param>
 		private async Task StartFirstScanEx(ScanSettings settings, IScanComparer comparer)
 		{
-			if (!Program.RemoteProcess.IsValid)
+			if (!process.IsValid)
 			{
 				return;
 			}
@@ -596,7 +607,7 @@ namespace ReClassNET.Forms
 
 			try
 			{
-				scanner = new Scanner(Program.RemoteProcess, settings);
+				scanner = new Scanner(process, settings);
 
 				var report = new Progress<int>(i =>
 				{
@@ -646,8 +657,8 @@ namespace ReClassNET.Forms
 			long.TryParse(startAddressTextBox.Text, NumberStyles.HexNumber, null, out var startAddressVar);
 			long.TryParse(stopAddressTextBox.Text, NumberStyles.HexNumber, null, out var endAddressVar);
 #if RECLASSNET64
-			settings.StartAddress = unchecked((IntPtr)startAddressVar);
-			settings.StopAddress = unchecked((IntPtr)endAddressVar);
+			settings.StartAddress = (IntPtr)startAddressVar;
+			settings.StopAddress = (IntPtr)endAddressVar;
 #else
 			settings.StartAddress = unchecked((IntPtr)(int)startAddressVar);
 			settings.StopAddress = unchecked((IntPtr)(int)endAddressVar);
@@ -656,7 +667,7 @@ namespace ReClassNET.Forms
 			int.TryParse(fastScanAlignmentTextBox.Text, out var alignment);
 			settings.FastScanAlignment = Math.Max(1, alignment);
 
-			SettingState CheckStateToSettingState(CheckState state)
+			static SettingState CheckStateToSettingState(CheckState state)
 			{
 				switch (state)
 				{
@@ -669,6 +680,9 @@ namespace ReClassNET.Forms
 				}
 			}
 
+			settings.ScanPrivateMemory = scanPrivateCheckBox.Checked;
+			settings.ScanImageMemory = scanImageCheckBox.Checked;
+			settings.ScanMappedMemory = scanMappedCheckBox.Checked;
 			settings.ScanWritableMemory = CheckStateToSettingState(scanWritableCheckBox.CheckState);
 			settings.ScanExecutableMemory = CheckStateToSettingState(scanExecutableCheckBox.CheckState);
 			settings.ScanCopyOnWriteMemory = CheckStateToSettingState(scanCopyOnWriteCheckBox.CheckState);
@@ -691,8 +705,8 @@ namespace ReClassNET.Forms
 
 			fastScanCheckBox.Checked = settings.EnableFastScan;
 			fastScanAlignmentTextBox.Text = Math.Max(1, settings.FastScanAlignment).ToString();
-			
-			CheckState SettingStateToCheckState(SettingState state)
+
+			static CheckState SettingStateToCheckState(SettingState state)
 			{
 				switch (state)
 				{
@@ -705,6 +719,9 @@ namespace ReClassNET.Forms
 				}
 			}
 
+			scanPrivateCheckBox.Checked = settings.ScanPrivateMemory;
+			scanImageCheckBox.Checked = settings.ScanImageMemory;
+			scanMappedCheckBox.Checked = settings.ScanMappedMemory;
 			scanWritableCheckBox.CheckState = SettingStateToCheckState(settings.ScanWritableMemory);
 			scanExecutableCheckBox.CheckState = SettingStateToCheckState(settings.ScanExecutableMemory);
 			scanCopyOnWriteCheckBox.CheckState = SettingStateToCheckState(settings.ScanCopyOnWriteMemory);
@@ -728,16 +745,24 @@ namespace ReClassNET.Forms
 				if (!long.TryParse(dualValueBox.Value1, numberStyle, null, out var value1)) throw new InvalidInputException(dualValueBox.Value1);
 				if (!long.TryParse(dualValueBox.Value2, numberStyle, null, out var value2) && checkBothInputFields) throw new InvalidInputException(dualValueBox.Value2);
 
+				if (compareType == ScanCompareType.Between || compareType == ScanCompareType.BetweenOrEqual)
+				{
+					if (value1 > value2)
+					{
+						Utils.Swap(ref value1, ref value2);
+					}
+				}
+
 				switch (settings.ValueType)
 				{
 					case ScanValueType.Byte:
 						return new ByteMemoryComparer(compareType, (byte)value1, (byte)value2);
 					case ScanValueType.Short:
-						return new ShortMemoryComparer(compareType, (short)value1, (short)value2);
+						return new ShortMemoryComparer(compareType, (short)value1, (short)value2, process.BitConverter);
 					case ScanValueType.Integer:
-						return new IntegerMemoryComparer(compareType, (int)value1, (int)value2);
+						return new IntegerMemoryComparer(compareType, (int)value1, (int)value2, process.BitConverter);
 					case ScanValueType.Long:
-						return new LongMemoryComparer(compareType, value1, value2);
+						return new LongMemoryComparer(compareType, value1, value2, process.BitConverter);
 				}
 			}
 			else if (settings.ValueType == ScanValueType.Float || settings.ValueType == ScanValueType.Double)
@@ -758,10 +783,18 @@ namespace ReClassNET.Forms
 					return digits;
 				}
 
-				var nf1 = Utils.GuessNumberFormat(dualValueBox.Value1);
+				var nf1 = NumberFormat.GuessNumberFormat(dualValueBox.Value1);
 				if (!double.TryParse(dualValueBox.Value1, NumberStyles.Float, nf1, out var value1)) throw new InvalidInputException(dualValueBox.Value1);
-				var nf2 = Utils.GuessNumberFormat(dualValueBox.Value2);
+				var nf2 = NumberFormat.GuessNumberFormat(dualValueBox.Value2);
 				if (!double.TryParse(dualValueBox.Value2, NumberStyles.Float, nf2, out var value2) && checkBothInputFields) throw new InvalidInputException(dualValueBox.Value2);
+
+				if (compareType == ScanCompareType.Between || compareType == ScanCompareType.BetweenOrEqual)
+				{
+					if (value1 > value2)
+					{
+						Utils.Swap(ref value1, ref value2);
+					}
+				}
 
 				var significantDigits = Math.Max(
 					CalculateSignificantDigits(dualValueBox.Value1, nf1),
@@ -773,9 +806,9 @@ namespace ReClassNET.Forms
 				switch (settings.ValueType)
 				{
 					case ScanValueType.Float:
-						return new FloatMemoryComparer(compareType, roundMode, significantDigits, (float)value1, (float)value2);
+						return new FloatMemoryComparer(compareType, roundMode, significantDigits, (float)value1, (float)value2, process.BitConverter);
 					case ScanValueType.Double:
-						return new DoubleMemoryComparer(compareType, roundMode, significantDigits, value1, value2);
+						return new DoubleMemoryComparer(compareType, roundMode, significantDigits, value1, value2, process.BitConverter);
 				}
 			}
 			else if (settings.ValueType == ScanValueType.ArrayOfBytes)
@@ -784,7 +817,7 @@ namespace ReClassNET.Forms
 
 				return new ArrayOfBytesMemoryComparer(pattern);
 			}
-			else if (settings.ValueType == ScanValueType.String)
+			else if (settings.ValueType == ScanValueType.String || settings.ValueType == ScanValueType.Regex)
 			{
 				if (string.IsNullOrEmpty(dualValueBox.Value1))
 				{
@@ -792,8 +825,14 @@ namespace ReClassNET.Forms
 				}
 
 				var encoding = encodingUtf8RadioButton.Checked ? Encoding.UTF8 : encodingUtf16RadioButton.Checked ? Encoding.Unicode : Encoding.UTF32;
-
-				return new StringMemoryComparer(dualValueBox.Value1, encoding, caseSensitiveCheckBox.Checked);
+				if (settings.ValueType == ScanValueType.String)
+				{
+					return new StringMemoryComparer(dualValueBox.Value1, encoding, caseSensitiveCheckBox.Checked);
+				}
+				else
+				{
+					return new RegexStringMemoryComparer(dualValueBox.Value1, encoding, caseSensitiveCheckBox.Checked);
+				}
 			}
 
 			throw new InvalidOperationException();
@@ -828,6 +867,7 @@ namespace ReClassNET.Forms
 					size = record.ValueLength;
 					break;
 				case ScanValueType.String:
+				case ScanValueType.Regex:
 					size = record.ValueLength;
 					break;
 				default:
@@ -843,7 +883,7 @@ namespace ReClassNET.Forms
 		public InvalidInputException(string input)
 			: base($"'{input}' is not a valid input.")
 		{
-			
+
 		}
 	}
 }

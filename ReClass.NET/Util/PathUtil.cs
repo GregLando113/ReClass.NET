@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Reflection;
@@ -14,9 +14,9 @@ namespace ReClassNET.Util
 			{
 				path = Assembly.GetExecutingAssembly().Location;
 			}
-			catch (Exception)
+			catch
 			{
-
+				// ignored
 			}
 
 			if (string.IsNullOrEmpty(path))
@@ -89,7 +89,7 @@ namespace ReClassNET.Util
 
 			if (url.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
 			{
-				url = url.Substring(8, url.Length - 8);
+				url = url.Substring(8);
 			}
 
 			url = url.Replace('/', Path.DirectorySeparatorChar);

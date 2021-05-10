@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -177,85 +177,27 @@ namespace ReClassNET.Native
 			{
 				var classesRoot = Registry.ClassesRoot;
 
-				try
-				{
-					classesRoot.CreateSubKey(fileExtension);
-				}
-				catch (Exception)
-				{
-					
-				}
-				using (var fileExtensionKey = classesRoot.OpenSubKey(fileExtension, true))
+				using (var fileExtensionKey = classesRoot.CreateSubKey(fileExtension))
 				{
 					fileExtensionKey?.SetValue(string.Empty, extensionId, RegistryValueKind.String);
 				}
 
-				try
-				{
-					classesRoot.CreateSubKey(extensionId);
-				}
-				catch (Exception)
-				{
-					
-				}
-				using (var extensionInfoKey = classesRoot.OpenSubKey(extensionId, true))
+				using (var extensionInfoKey = classesRoot.CreateSubKey(extensionId))
 				{
 					extensionInfoKey?.SetValue(string.Empty, applicationName, RegistryValueKind.String);
 
-					try
+					using (var icon = extensionInfoKey?.CreateSubKey("DefaultIcon"))
 					{
-						extensionInfoKey?.CreateSubKey("DefaultIcon");
-					}
-					catch (Exception)
-					{
-
+						icon?.SetValue(string.Empty, "\"" + applicationPath + "\",0", RegistryValueKind.String);
 					}
 
-					using (var icon = extensionInfoKey?.OpenSubKey("DefaultIcon", true))
+					using (var shellKey = extensionInfoKey?.CreateSubKey("shell"))
 					{
-						if (applicationPath.IndexOfAny(new[] { ' ', '\t' }) < 0)
+						using (var openKey = shellKey?.CreateSubKey("open"))
 						{
-							icon?.SetValue(string.Empty, applicationPath + ",0", RegistryValueKind.String);
-						}
-						else
-						{
-							icon?.SetValue(string.Empty, "\"" + applicationPath + "\",0", RegistryValueKind.String);
-						}
-					}
-
-					try
-					{
-						extensionInfoKey?.CreateSubKey("shell");
-					}
-					catch (Exception)
-					{
-					}
-					using (var shellKey = extensionInfoKey?.OpenSubKey("shell", true))
-					{
-						try
-						{
-							shellKey?.CreateSubKey("open");
-						}
-						catch (Exception)
-						{
-
-						}
-
-						using (var openKey = shellKey?.OpenSubKey("open", true))
-						{
-
 							openKey?.SetValue(string.Empty, $"&Open with {applicationName}", RegistryValueKind.String);
 
-							try
-							{
-								openKey?.CreateSubKey("command");
-							}
-							catch (Exception)
-							{
-
-							}
-
-							using (var commandKey = openKey?.OpenSubKey("command", true))
+							using (var commandKey = openKey?.CreateSubKey("command"))
 							{
 								commandKey?.SetValue(string.Empty, $"\"{applicationPath}\" \"%1\"", RegistryValueKind.String);
 							}
@@ -284,9 +226,9 @@ namespace ReClassNET.Native
 
 				ShChangeNotify();
 			}
-			catch (Exception)
+			catch
 			{
-				
+				// ignored
 			}
 		}
 
@@ -296,9 +238,9 @@ namespace ReClassNET.Native
 			{
 				SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
 			}
-			catch (Exception)
+			catch
 			{
-				
+				// ignored
 			}
 		}
 
@@ -321,9 +263,9 @@ namespace ReClassNET.Native
 
 				SendMessage(h, BCM_SETSHIELD, IntPtr.Zero, (IntPtr)(setShield ? 1 : 0));
 			}
-			catch (Exception)
+			catch
 			{
-				
+				// ignored
 			}
 		}
 	}

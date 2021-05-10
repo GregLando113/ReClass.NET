@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
@@ -43,10 +44,11 @@ namespace ReClassNET
 			try
 			{
 				DpiUtil.ConfigureProcess();
+				DpiUtil.TrySetDpiFromCurrentDesktop();
 			}
 			catch
 			{
-				
+				// ignored
 			}
 
 			MonoSpaceFont = new FontEx
@@ -65,7 +67,17 @@ namespace ReClassNET
 
 			Settings = SettingsSerializer.Load();
 			Logger = new GuiLogger();
-#if DEBUG
+
+			if (!NativeMethods.IsUnix() && Settings.RunAsAdmin && !WinUtil.IsAdministrator)
+			{
+				WinUtil.RunElevated(Process.GetCurrentProcess().MainModule?.FileName, args.Length > 0 ? string.Join(" ", args) : null);
+				return;
+			}
+
+#if !DEBUG
+			try
+			{
+#endif
 			using (var coreFunctions = new CoreFunctionsManager())
 			{
 				RemoteProcess = new RemoteProcess(coreFunctions);
@@ -76,19 +88,7 @@ namespace ReClassNET
 
 				RemoteProcess.Dispose();
 			}
-#else
-			try
-			{
-				using (var coreFunctions = new CoreFunctionsManager())
-				{
-					RemoteProcess = new RemoteProcess(coreFunctions);
-
-					MainForm = new MainForm();
-
-					Application.Run(MainForm);
-
-					RemoteProcess.Dispose();
-				}
+#if !DEBUG
 			}
 			catch (Exception ex)
 			{
@@ -107,6 +107,7 @@ namespace ReClassNET
 
 			var msg = new ExceptionMessageBox(ex)
 			{
+				Beep = false,
 				ShowToolBar = true,
 				Symbol = ExceptionMessageBoxSymbol.Error
 			};

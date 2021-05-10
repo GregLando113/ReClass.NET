@@ -13,11 +13,11 @@ namespace ReClassNET.Extensions
 		[DebuggerStepThrough]
 		public static bool IsPrintable(this char c)
 		{
-			return ' ' <= c && c <= '~';
+			return (' ' <= c && c <= '~' || '\xA1' <= c && c <= '\xFF')  && c != '\xFFFD' /* Unicode REPLACEMENT CHARACTER � */;
 		}
 
 		[DebuggerStepThrough]
-		public static IEnumerable<char> InterpretAsUtf8(this IEnumerable<byte> source)
+		public static IEnumerable<char> InterpretAsSingleByteCharacter(this IEnumerable<byte> source)
 		{
 			Contract.Requires(source != null);
 
@@ -25,7 +25,7 @@ namespace ReClassNET.Extensions
 		}
 
 		[DebuggerStepThrough]
-		public static IEnumerable<char> InterpretAsUtf16(this IEnumerable<byte> source)
+		public static IEnumerable<char> InterpretAsDoubleByteCharacter(this IEnumerable<byte> source)
 		{
 			Contract.Requires(source != null);
 
@@ -40,17 +40,23 @@ namespace ReClassNET.Extensions
 		{
 			Contract.Requires(source != null);
 
-			return IsLikelyPrintableData(source) >= 1.0f;
+			return CalculatePrintableDataThreshold(source) >= 1.0f;
 		}
 
 		[DebuggerStepThrough]
-		public static float IsLikelyPrintableData(this IEnumerable<char> source)
+		public static bool IsLikelyPrintableData(this IEnumerable<char> source)
 		{
 			Contract.Requires(source != null);
 
-			bool doCountValid = true;
-			int countValid = 0;
-			int countAll = 0;
+			return CalculatePrintableDataThreshold(source) >= 0.75f;
+		}
+
+		[DebuggerStepThrough]
+		public static float CalculatePrintableDataThreshold(this IEnumerable<char> source)
+		{
+			var doCountValid = true;
+			var countValid = 0;
+			var countAll = 0;
 
 			foreach (var c in source)
 			{
@@ -67,6 +73,11 @@ namespace ReClassNET.Extensions
 						doCountValid = false;
 					}
 				}
+			}
+
+			if (countAll == 0)
+			{
+				return 0.0f;
 			}
 
 			return countValid / (float)countAll;
@@ -86,10 +97,12 @@ namespace ReClassNET.Extensions
 			return s.Substring(0, length);
 		}
 
-		private static readonly Regex HexRegex = new Regex("(0x|h)?([0-9A-F]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+		private static readonly Regex hexadecimalValueRegex = new Regex("^(0x|h)?([0-9A-F]+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 		public static bool TryGetHexString(this string s, out string value)
 		{
-			var match = HexRegex.Match(s);
+			Contract.Requires(s != null);
+
+			var match = hexadecimalValueRegex.Match(s);
 			value = match.Success ? match.Groups[2].Value : null;
 
 			return match.Success;

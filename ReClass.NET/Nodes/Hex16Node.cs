@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+using System.Drawing;
+using ReClassNET.Controls;
 using ReClassNET.Memory;
 using ReClassNET.UI;
 
@@ -6,28 +7,24 @@ namespace ReClassNET.Nodes
 {
 	public class Hex16Node : BaseHexNode
 	{
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => 2;
 
-		/// <summary>Gets informations about this node to show in a tool tip.</summary>
-		/// <param name="spot">The spot.</param>
-		/// <param name="memory">The process memory.</param>
-		/// <returns>The information to show in a tool tip.</returns>
-		public override string GetToolTipText(HotSpot spot, MemoryBuffer memory)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			var value = memory.ReadObject<UInt16Data>(Offset);
+			name = "Hex16";
+			icon = Properties.Resources.B16x16_Button_Hex_16;
+		}
+
+		public override string GetToolTipText(HotSpot spot)
+		{
+			var value = new UInt16Data { ShortValue = spot.Memory.ReadInt16(Offset) };
 
 			return $"Int16: {value.ShortValue}\nUInt16: 0x{value.UShortValue:X04}";
 		}
 
-		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
-		/// <param name="x">The x coordinate.</param>
-		/// <param name="y">The y coordinate.</param>
-		/// <returns>The pixel size the node occupies.</returns>
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override Size Draw(DrawContext context, int x, int y)
 		{
-			return Draw(view, x, y, view.Settings.ShowNodeText ? view.Memory.ReadPrintableAsciiString(Offset, 2) + "       " : null, 2);
+			return Draw(context, x, y, context.Settings.ShowNodeText ? context.Memory.ReadString(context.Settings.RawDataEncoding, Offset, 2) + "       " : null, 2);
 		}
 
 		public override void Update(HotSpot spot)

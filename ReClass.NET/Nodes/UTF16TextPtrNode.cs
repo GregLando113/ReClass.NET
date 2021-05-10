@@ -1,6 +1,6 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Text;
-using ReClassNET.UI;
+using ReClassNET.Controls;
 
 namespace ReClassNET.Nodes
 {
@@ -8,9 +8,15 @@ namespace ReClassNET.Nodes
 	{
 		public override Encoding Encoding => Encoding.Unicode;
 
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			return DrawText(view, x, y, "Text16Ptr");
+			name = "UTF16 / Unicode Text Pointer";
+			icon = Properties.Resources.B16x16_Button_UText_Pointer;
+		}
+
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			return DrawText(context, x, y, "Text16Ptr");
 		}
 	}
 }

@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Drawing;
+using ReClassNET.Controls;
 using ReClassNET.Memory;
 using ReClassNET.UI;
 
@@ -7,37 +8,33 @@ namespace ReClassNET.Nodes
 {
 	public class Hex64Node : BaseHexCommentNode
 	{
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => 8;
 
-		public override bool UseMemoryPreviewToolTip(HotSpot spot, MemoryBuffer memory, out IntPtr address)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			var value = memory.ReadObject<UInt64FloatDoubleData>(Offset);
+			name = "Hex64";
+			icon = Properties.Resources.B16x16_Button_Hex_64;
+		}
+
+		public override bool UseMemoryPreviewToolTip(HotSpot spot, out IntPtr address)
+		{
+			var value = ReadFromBuffer(spot.Memory, Offset);
 
 			address = value.IntPtr;
 
-			return memory.Process.GetSectionToPointer(value.IntPtr) != null;
+			return spot.Process.GetSectionToPointer(value.IntPtr) != null;
 		}
 
-		/// <summary>Gets informations about this node to show in a tool tip.</summary>
-		/// <param name="spot">The spot.</param>
-		/// <param name="memory">The process memory.</param>
-		/// <returns>The information to show in a tool tip.</returns>
-		public override string GetToolTipText(HotSpot spot, MemoryBuffer memory)
+		public override string GetToolTipText(HotSpot spot)
 		{
-			var value = memory.ReadObject<UInt64FloatDoubleData>(Offset);
+			var value = ReadFromBuffer(spot.Memory, Offset);
 
 			return $"Int64: {value.LongValue}\nUInt64: 0x{value.ULongValue:X016}\nFloat: {value.FloatValue:0.000}\nDouble: {value.DoubleValue:0.000}";
 		}
 
-		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
-		/// <param name="x">The x coordinate.</param>
-		/// <param name="y">The y coordinate.</param>
-		/// <returns>The pixel size the node occupies.</returns>
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override Size Draw(DrawContext context, int x, int y)
 		{
-			return Draw(view, x, y, view.Settings.ShowNodeText ? view.Memory.ReadPrintableAsciiString(Offset, 8) + " " : null, 8);
+			return Draw(context, x, y, context.Settings.ShowNodeText ? context.Memory.ReadString(context.Settings.RawDataEncoding, Offset, 8) + " " : null, 8);
 		}
 
 		public override void Update(HotSpot spot)
@@ -45,15 +42,21 @@ namespace ReClassNET.Nodes
 			Update(spot, 8);
 		}
 
-		protected override int AddComment(ViewInfo view, int x, int y)
+		protected override int AddComment(DrawContext context, int x, int y)
 		{
-			x = base.AddComment(view, x, y);
+			x = base.AddComment(context, x, y);
 
-			var value = view.Memory.ReadObject<UInt64FloatDoubleData>(Offset);
+			var value = ReadFromBuffer(context.Memory, Offset);
 
-			x = AddComment(view, x, y, value.FloatValue, value.IntPtr, value.UIntPtr);
+			x = AddComment(context, x, y, value.FloatValue, value.IntPtr, value.UIntPtr);
 
 			return x;
 		}
+
+		private static UInt64FloatDoubleData ReadFromBuffer(MemoryBuffer memory, int offset) => new UInt64FloatDoubleData
+		{
+			Raw1 = memory.ReadInt32(offset),
+			Raw2 = memory.ReadInt32(offset + sizeof(int))
+		};
 	}
 }

@@ -1,5 +1,5 @@
-﻿using System.Drawing;
-using ReClassNET.Memory;
+using System.Drawing;
+using ReClassNET.Controls;
 using ReClassNET.UI;
 
 namespace ReClassNET.Nodes
@@ -8,16 +8,22 @@ namespace ReClassNET.Nodes
 	{
 		public override int MemorySize => 1;
 
-		public override string GetToolTipText(HotSpot spot, MemoryBuffer memory)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			var b = memory.ReadUInt8(Offset);
+			name = "Hex8";
+			icon = Properties.Resources.B16x16_Button_Hex_8;
+		}
+
+		public override string GetToolTipText(HotSpot spot)
+		{
+			var b = spot.Memory.ReadUInt8(Offset);
 
 			return $"Int8: {(int)b}\nUInt8: 0x{b:X02}";
 		}
 
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override Size Draw(DrawContext context, int x, int y)
 		{
-			return Draw(view, x, y, view.Settings.ShowNodeText ? view.Memory.ReadPrintableAsciiString(Offset, 1) + "        " : null, 1);
+			return Draw(context, x, y, context.Settings.ShowNodeText ? context.Memory.ReadString(context.Settings.RawDataEncoding, Offset, 1) + "        " : null, 1);
 		}
 
 		public override void Update(HotSpot spot)

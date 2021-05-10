@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Diagnostics.Contracts;
 using System.Globalization;
@@ -102,6 +102,7 @@ namespace ReClassNET.MemoryScanner
 					ValueStr = FormatValue(byteData);
 					break;
 				case ScanValueType.String:
+				case ScanValueType.Regex:
 					var strResult = (StringScanResult)result;
 					ValueLength = strResult.Value.Length;
 					Encoding = strResult.Encoding;
@@ -177,7 +178,8 @@ namespace ReClassNET.MemoryScanner
 					buffer = new byte[ValueLength];
 					break;
 				case ScanValueType.String:
-					buffer = new byte[ValueLength * Encoding.GetSimpleByteCountPerChar()];
+				case ScanValueType.Regex:
+					buffer = new byte[ValueLength * Encoding.GuessByteCountPerChar()];
 					break;
 				default:
 					throw new InvalidOperationException();
@@ -191,24 +193,25 @@ namespace ReClassNET.MemoryScanner
 						ValueStr = FormatValue(buffer[0], ShowValueHexadecimal);
 						break;
 					case ScanValueType.Short:
-						ValueStr = FormatValue(BitConverter.ToInt16(buffer, 0), ShowValueHexadecimal);
+						ValueStr = FormatValue(process.BitConverter.ToInt16(buffer, 0), ShowValueHexadecimal);
 						break;
 					case ScanValueType.Integer:
-						ValueStr = FormatValue(BitConverter.ToInt32(buffer, 0), ShowValueHexadecimal);
+						ValueStr = FormatValue(process.BitConverter.ToInt32(buffer, 0), ShowValueHexadecimal);
 						break;
 					case ScanValueType.Long:
-						ValueStr = FormatValue(BitConverter.ToInt64(buffer, 0), ShowValueHexadecimal);
+						ValueStr = FormatValue(process.BitConverter.ToInt64(buffer, 0), ShowValueHexadecimal);
 						break;
 					case ScanValueType.Float:
-						ValueStr = FormatValue(BitConverter.ToSingle(buffer, 0));
+						ValueStr = FormatValue(process.BitConverter.ToSingle(buffer, 0));
 						break;
 					case ScanValueType.Double:
-						ValueStr = FormatValue(BitConverter.ToDouble(buffer, 0));
+						ValueStr = FormatValue(process.BitConverter.ToDouble(buffer, 0));
 						break;
 					case ScanValueType.ArrayOfBytes:
 						ValueStr = FormatValue(buffer);
 						break;
 					case ScanValueType.String:
+					case ScanValueType.Regex:
 						ValueStr = FormatValue(Encoding.GetString(buffer));
 						break;
 				}
@@ -238,31 +241,31 @@ namespace ReClassNET.MemoryScanner
 				switch (ValueType)
 				{
 					case ScanValueType.Byte:
-						data = BitConverter.GetBytes((byte)value);
+						data = process.BitConverter.GetBytes((byte)value);
 						break;
 					case ScanValueType.Short:
-						data = BitConverter.GetBytes((short)value);
+						data = process.BitConverter.GetBytes((short)value);
 						break;
 					case ScanValueType.Integer:
-						data = BitConverter.GetBytes((int)value);
+						data = process.BitConverter.GetBytes((int)value);
 						break;
 					case ScanValueType.Long:
-						data = BitConverter.GetBytes(value);
+						data = process.BitConverter.GetBytes(value);
 						break;
 				}
 			}
 			else if (ValueType == ScanValueType.Float || ValueType == ScanValueType.Double)
 			{
-				var nf = Utils.GuessNumberFormat(input);
+				var nf = NumberFormat.GuessNumberFormat(input);
 				double.TryParse(input, NumberStyles.Float, nf, out var value);
 
 				switch (ValueType)
 				{
 					case ScanValueType.Float:
-						data = BitConverter.GetBytes((float)value);
+						data = process.BitConverter.GetBytes((float)value);
 						break;
 					case ScanValueType.Double:
-						data = BitConverter.GetBytes(value);
+						data = process.BitConverter.GetBytes(value);
 						break;
 				}
 			}
@@ -281,7 +284,7 @@ namespace ReClassNET.MemoryScanner
 		private static string FormatValue(long value, bool showAsHex) => showAsHex ? value.ToString("X") : value.ToString();
 		private static string FormatValue(float value) => value.ToString("0.0000");
 		private static string FormatValue(double value) => value.ToString("0.0000");
-		private static string FormatValue(byte[] value) => Utils.ByteArrayToHexString(value);
+		private static string FormatValue(byte[] value) => HexadecimalFormatter.ToString(value);
 		private static string FormatValue(string value) => value;
 	}
 }

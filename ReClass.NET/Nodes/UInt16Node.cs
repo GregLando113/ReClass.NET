@@ -1,9 +1,9 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Globalization;
+using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
@@ -11,10 +11,16 @@ namespace ReClassNET.Nodes
 	{
 		public override int MemorySize => 2;
 
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			var value = ReadValueFromMemory(view.Memory);
-			return DrawNumeric(view, x, y, Icons.Unsigned, "UInt16", value.ToString(), $"0x{value:X}");
+			name = "UInt16 / WORD";
+			icon = Properties.Resources.B16x16_Button_UInt_16;
+		}
+
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			var value = ReadValueFromMemory(context.Memory);
+			return DrawNumeric(context, x, y, context.IconProvider.Unsigned, "UInt16", value.ToString(), $"0x{value:X}");
 		}
 
 		public override void Update(HotSpot spot)
@@ -25,7 +31,7 @@ namespace ReClassNET.Nodes
 			{
 				if (ushort.TryParse(spot.Text, out var val) || spot.Text.TryGetHexString(out var hexValue) && ushort.TryParse(hexValue, NumberStyles.HexNumber, null, out val))
 				{
-					spot.Memory.Process.WriteRemoteMemory(spot.Address, val);
+					spot.Process.WriteRemoteMemory(spot.Address, val);
 				}
 			}
 		}

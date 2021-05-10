@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -13,6 +13,7 @@ namespace ReClassNET.MemoryScanner
 {
 	public class InputCorrelatedScanner : Scanner
 	{
+		private readonly RemoteProcess process;
 		private readonly KeyboardInput input;
 		private readonly List<KeyboardHotkey> hotkeys;
 
@@ -29,6 +30,7 @@ namespace ReClassNET.MemoryScanner
 			Contract.Requires(hotkeys != null);
 			Contract.Ensures(this.input != null);
 
+			this.process = process;
 			this.input = input;
 			this.hotkeys = hotkeys.ToList();
 		}
@@ -56,23 +58,16 @@ namespace ReClassNET.MemoryScanner
 		{
 			Contract.Ensures(Contract.Result<IScanComparer>() != null);
 
-			switch (Settings.ValueType)
+			return Settings.ValueType switch
 			{
-				case ScanValueType.Byte:
-					return new ByteMemoryComparer(compareType, 0, 0);
-				case ScanValueType.Short:
-					return new ShortMemoryComparer(compareType, 0, 0);
-				case ScanValueType.Integer:
-					return new IntegerMemoryComparer(compareType, 0, 0);
-				case ScanValueType.Long:
-					return new LongMemoryComparer(compareType, 0, 0);
-				case ScanValueType.Float:
-					return new FloatMemoryComparer(compareType, ScanRoundMode.Normal, 2, 0, 0);
-				case ScanValueType.Double:
-					return new DoubleMemoryComparer(compareType, ScanRoundMode.Normal, 2, 0, 0);
-				default:
-					throw new InvalidOperationException();
-			}
+				ScanValueType.Byte => new ByteMemoryComparer(compareType, 0, 0),
+				ScanValueType.Short => new ShortMemoryComparer(compareType, 0, 0, process.BitConverter),
+				ScanValueType.Integer => new IntegerMemoryComparer(compareType, 0, 0, process.BitConverter),
+				ScanValueType.Long => new LongMemoryComparer(compareType, 0, 0, process.BitConverter),
+				ScanValueType.Float => new FloatMemoryComparer(compareType, ScanRoundMode.Normal, 2, 0, 0, process.BitConverter),
+				ScanValueType.Double => new DoubleMemoryComparer(compareType, ScanRoundMode.Normal, 2, 0, 0, process.BitConverter),
+				_ => throw new InvalidOperationException(),
+			};
 		}
 
 		/// <summary>

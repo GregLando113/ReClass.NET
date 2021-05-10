@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Linq;
+using ReClassNET.Controls;
 using ReClassNET.Memory;
 using ReClassNET.UI;
 
@@ -17,10 +18,10 @@ namespace ReClassNET.Nodes
 			public string Instruction { get; set; }
 		}
 
-		protected IntPtr address = IntPtr.Zero;
-		protected readonly List<FunctionNodeInstruction> instructions = new List<FunctionNodeInstruction>();
+		protected IntPtr Address = IntPtr.Zero;
+		protected readonly List<FunctionNodeInstruction> Instructions = new List<FunctionNodeInstruction>();
 
-		protected Size DrawInstructions(ViewInfo view, int tx, int y)
+		protected Size DrawInstructions(DrawContext view, int tx, int y)
 		{
 			Contract.Requires(view != null);
 
@@ -31,18 +32,18 @@ namespace ReClassNET.Nodes
 
 			using (var brush = new SolidBrush(view.Settings.HiddenColor))
 			{
-				foreach (var instruction in instructions)
+				foreach (var instruction in Instructions)
 				{
 					y += view.Font.Height;
 
 					var x = AddText(view, tx, y, view.Settings.AddressColor, HotSpot.ReadOnlyId, instruction.Address) + 6;
 
-					view.Context.FillRectangle(brush, x, y, 1, view.Font.Height);
+					view.Graphics.FillRectangle(brush, x, y, 1, view.Font.Height);
 					x += 6;
 
 					x = Math.Max(AddText(view, x, y, view.Settings.HexColor, HotSpot.ReadOnlyId, instruction.Data) + 6, x + minWidth);
 
-					view.Context.FillRectangle(brush, x, y, 1, view.Font.Height);
+					view.Graphics.FillRectangle(brush, x, y, 1, view.Font.Height);
 					x += 6;
 
 					x = AddText(view, x, y, view.Settings.ValueColor, HotSpot.ReadOnlyId, instruction.Instruction);
@@ -54,18 +55,18 @@ namespace ReClassNET.Nodes
 			return new Size(maxWidth, y - origY);
 		}
 
-		protected void DisassembleRemoteCode(MemoryBuffer memory, IntPtr address, out int memorySize)
+		protected void DisassembleRemoteCode(RemoteProcess process, IntPtr address, out int memorySize)
 		{
-			Contract.Requires(memory != null);
+			Contract.Requires(process != null);
 
 			memorySize = 0;
 
-			var disassembler = new Disassembler(memory.Process.CoreFunctions);
-			foreach (var instruction in disassembler.RemoteDisassembleFunction(memory.Process, address, 8192))
+			var disassembler = new Disassembler(process.CoreFunctions);
+			foreach (var instruction in disassembler.RemoteDisassembleFunction(process, address, 8192))
 			{
 				memorySize += instruction.Length;
 
-				instructions.Add(new FunctionNodeInstruction
+				Instructions.Add(new FunctionNodeInstruction
 				{
 					Address = instruction.Address.ToString(Constants.AddressHexFormat),
 					Data = string.Join(" ", instruction.Data.Take(instruction.Length).Select(b => $"{b:X2}")),

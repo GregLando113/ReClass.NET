@@ -1,71 +1,66 @@
-﻿using System;
+using System;
 using System.Drawing;
-using ReClassNET.Extensions;
+using ReClassNET.Controls;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
-	public class ClassInstanceNode : BaseReferenceNode
+	public class ClassInstanceNode : BaseClassWrapperNode
 	{
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => InnerNode.MemorySize;
 
-		public override bool PerformCycleCheck => true;
+		protected override bool PerformCycleCheck => true;
 
-		public override void Intialize()
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			InnerNode = ClassNode.Create();
-			InnerNode.Intialize();
+			name = "Class Instance";
+			icon = Properties.Resources.B16x16_Button_Class_Instance;
 		}
 
-		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
-		/// <param name="x">The x coordinate.</param>
-		/// <param name="y">The y coordinate.</param>
-		/// <returns>The pixel size the node occupies.</returns>
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override Size Draw(DrawContext context, int x, int y)
 		{
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
-
-			DrawInvalidMemoryIndicator(view, y);
 
 			var origX = x;
 			var origY = y;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x = AddOpenClose(view, x, y);
-			x = AddIcon(view, x, y, Icons.Class, -1, HotSpotType.None);
+			x = AddOpenCloseIcon(context, x, y);
+			x = AddIcon(context, x, y, context.IconProvider.Class, HotSpot.NoneId, HotSpotType.None);
 
 			var tx = x;
-			x = AddAddressOffset(view, x, y);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, "Instance") + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.ValueColor, HotSpot.NoneId, $"<{InnerNode.Name}>") + view.Font.Width;
-			x = AddIcon(view, x, y, Icons.Change, 4, HotSpotType.ChangeType) + view.Font.Width;
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, "Instance") + context.Font.Width;
+			if (!IsWrapped)
+			{
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name) + context.Font.Width;
+			}
+			x = AddText(context, x, y, context.Settings.ValueColor, HotSpot.NoneId, $"<{InnerNode.Name}>") + context.Font.Width;
+			x = AddIcon(context, x, y, context.IconProvider.Change, 4, HotSpotType.ChangeClassType) + context.Font.Width;
 
-			x = AddComment(view, x, y);
+			x = AddComment(context, x, y);
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
 
-			y += view.Font.Height;
+			y += context.Font.Height;
 
 			var size = new Size(x - origX, y - origY);
 
-			if (levelsOpen[view.Level])
+			if (LevelsOpen[context.Level])
 			{
-				var v = view.Clone();
-				v.Address = view.Address.Add(Offset);
-				v.Memory = view.Memory.Clone();
-				v.Memory.Offset += Offset.ToInt32();
+				var innerContext = context.Clone();
+				innerContext.Address = context.Address + Offset;
+				innerContext.Memory = context.Memory.Clone();
+				innerContext.Memory.Offset += Offset;
 
-				var innerSize = InnerNode.Draw(v, tx, y);
+				var innerSize = InnerNode.Draw(innerContext, tx, y);
 				size.Width = Math.Max(size.Width, innerSize.Width + tx - origX);
 				size.Height += innerSize.Height;
 			}
@@ -73,17 +68,17 @@ namespace ReClassNET.Nodes
 			return size;
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
 				return HiddenHeight;
 			}
 
-			var height = view.Font.Height;
-			if (levelsOpen[view.Level])
+			var height = context.Font.Height;
+			if (LevelsOpen[context.Level])
 			{
-				height += InnerNode.CalculateDrawnHeight(view);
+				height += InnerNode.CalculateDrawnHeight(context);
 			}
 			return height;
 		}

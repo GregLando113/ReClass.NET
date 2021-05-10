@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -9,151 +9,126 @@ namespace ReClassNET.UI
 {
 	public static class DpiUtil
 	{
-		private const int StdDpi = 96;
+		public const int DefalutDpi = 96;
 
-		private static bool initialized;
-
-		private static int dpiX = StdDpi;
-		private static int dpiY = StdDpi;
+		private static int dpiX = DefalutDpi;
+		private static int dpiY = DefalutDpi;
 
 		private static double scaleX = 1.0;
 		private static double scaleY = 1.0;
-
-		public static bool ScalingRequired
-		{
-			get
-			{
-				if (Program.DesignMode)
-				{
-					return false;
-				}
-
-				EnsureInitialized();
-
-				return dpiX != StdDpi || dpiY != StdDpi;
-			}
-		}
-
-		private static void EnsureInitialized()
-		{
-			if (initialized)
-			{
-				return;
-			}
-
-			try
-			{
-				using (var g = Graphics.FromHwnd(IntPtr.Zero))
-				{
-					dpiX = (int)g.DpiX;
-					dpiY = (int)g.DpiY;
-
-					if (dpiX <= 0 || dpiY <= 0)
-					{
-						dpiX = StdDpi;
-						dpiY = StdDpi;
-					}
-				}
-			}
-			catch
-			{
-
-			}
-
-			scaleX = dpiX / (double)StdDpi;
-			scaleY = dpiY / (double)StdDpi;
-
-			initialized = true;
-		}
 
 		public static void ConfigureProcess()
 		{
 			NativeMethods.SetProcessDpiAwareness();
 		}
 
+		public static void SetDpi(int x, int y)
+		{
+			dpiX = x;
+			dpiY = y;
+
+			if (dpiX <= 0 || dpiY <= 0)
+			{
+				dpiX = DefalutDpi;
+				dpiY = DefalutDpi;
+			}
+
+			scaleX = dpiX / (double)DefalutDpi;
+			scaleY = dpiY / (double)DefalutDpi;
+		}
+
+		public static void TrySetDpiFromCurrentDesktop()
+		{
+			try
+			{
+				using var g = Graphics.FromHwnd(IntPtr.Zero);
+
+				SetDpi((int)g.DpiX, (int)g.DpiY);
+			}
+			catch
+			{
+				// ignored
+			}
+		}
+
 		public static int ScaleIntX(int i)
 		{
-			EnsureInitialized();
-
 			return (int)Math.Round(i * scaleX);
 		}
 
 		public static int ScaleIntY(int i)
 		{
-			EnsureInitialized();
-
 			return (int)Math.Round(i * scaleY);
 		}
 
-		public static Image ScaleImage(Image img)
+		public static Image ScaleImage(Image sourceImage)
 		{
-			if (img == null)
+			if (sourceImage == null)
 			{
 				return null;
 			}
 
-			int w = img.Width;
-			int h = img.Height;
-			int sw = ScaleIntX(w);
-			int sh = ScaleIntY(h);
+			var width = sourceImage.Width;
+			var height = sourceImage.Height;
+			var scaledWidth = ScaleIntX(width);
+			var scaledHeight = ScaleIntY(height);
 
-			if (w == sw && h == sh)
+			if (width == scaledWidth && height == scaledHeight)
 			{
-				return img;
+				return sourceImage;
 			}
 
-			return ScaleImage(img, sw, sh);
+			return ScaleImage(sourceImage, scaledWidth, scaledHeight);
 		}
 
-		private static Image ScaleImage(Image img, int w, int h)
+		private static Image ScaleImage(Image sourceImage, int width, int height)
 		{
-			Contract.Requires(img != null);
-			Contract.Requires(w >= 0);
-			Contract.Requires(h >= 0);
+			Contract.Requires(sourceImage != null);
+			Contract.Requires(width >= 0);
+			Contract.Requires(height >= 0);
 
-			var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-			using (Graphics g = Graphics.FromImage(bmp))
+			var scaledImage = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+
+			using var g = Graphics.FromImage(scaledImage);
+			g.Clear(Color.Transparent);
+
+			g.SmoothingMode = SmoothingMode.HighQuality;
+			g.CompositingQuality = CompositingQuality.HighQuality;
+
+			var sourceWidth = sourceImage.Width;
+			var sourceHeight = sourceImage.Height;
+
+			var interpolationMode = InterpolationMode.HighQualityBicubic;
+			if (sourceWidth > 0 && sourceHeight > 0)
 			{
-				g.Clear(Color.Transparent);
-
-				g.SmoothingMode = SmoothingMode.HighQuality;
-				g.CompositingQuality = CompositingQuality.HighQuality;
-
-				var wSrc = img.Width;
-				var hSrc = img.Height;
-
-				InterpolationMode im = InterpolationMode.HighQualityBicubic;
-				if (wSrc > 0 && hSrc > 0)
+				if ((width % sourceWidth) == 0 && (height % sourceHeight) == 0)
 				{
-					if ((w % wSrc) == 0 && (h % hSrc) == 0)
-					{
-						im = InterpolationMode.NearestNeighbor;
-					}
+					interpolationMode = InterpolationMode.NearestNeighbor;
 				}
-
-				g.InterpolationMode = im;
-
-				var rSource = new RectangleF(0.0f, 0.0f, wSrc, hSrc);
-				var rDest = new RectangleF(0.0f, 0.0f, w, h);
-				AdjustScaleRects(ref rSource, ref rDest);
-
-				g.DrawImage(img, rDest, rSource, GraphicsUnit.Pixel);
 			}
 
-			return bmp;
+			g.InterpolationMode = interpolationMode;
+
+			var srcRect = new RectangleF(0.0f, 0.0f, sourceWidth, sourceHeight);
+			var destRect = new RectangleF(0.0f, 0.0f, width, height);
+			AdjustScaleRects(ref srcRect, ref destRect);
+
+			g.DrawImage(sourceImage, destRect, srcRect, GraphicsUnit.Pixel);
+
+			return scaledImage;
 		}
 
-		private static void AdjustScaleRects(ref RectangleF rSource, ref RectangleF rDest)
+		private static void AdjustScaleRects(ref RectangleF srcRect, ref RectangleF destRect)
 		{
-			if (rDest.Width > rSource.Width)
-				rSource.X = rSource.X - 0.5f;
-			if (rDest.Height > rSource.Height)
-				rSource.Y = rSource.Y - 0.5f;
+			if (destRect.Width > srcRect.Width)
+				srcRect.X -= 0.5f;
+			if (destRect.Height > srcRect.Height)
+				srcRect.Y -= 0.5f;
 
-			if (rDest.Width < rSource.Width)
-				rSource.X = rSource.X + 0.5f;
-			if (rDest.Height < rSource.Height)
-				rSource.Y = rSource.Y + 0.5f;
+			if (destRect.Width < srcRect.Width)
+				srcRect.X += 0.5f;
+			if (destRect.Height < srcRect.Height)
+				srcRect.Y += 0.5f;
 		}
 	}
 }

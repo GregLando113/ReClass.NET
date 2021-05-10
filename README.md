@@ -7,19 +7,21 @@ This is a port of ReClass to the .NET platform with lots of additional features.
 - Support for x86 / x64
 - File import from ReClass 2007-2016 and ReClass QT
 - Memory Nodes
+  - Arrays and Pointers to every other node types
   - Hex 8 / 16 / 32 / 64
   - Int 8 / 16 / 32 / 64
   - UInt 8 / 16 / 32 / 64
   - Bool
   - Bits ![](https://abload.de/img/bitsnhlql.jpg)
+  - Enumerations
   - Float / Double
   - Vector 2 / 3 / 4
   - Matrix 3x3 / 3x4 / 4x4
-  - UTF8/16/32 Text and pointer to text
-  - Class Arrays and array of pointers to classes
-  - VTable
-  - Function Pointer
+  - UTF8 / UTF16 / UTF32 Text and pointer to text
+  - Virtual Tables
   - Function
+  - Function Pointer
+  - Unions
 - Automatic Node Dissection
 - Highlight changed memory
 - Pointer Preview
@@ -35,7 +37,7 @@ This is a port of ReClass to the .NET platform with lots of additional features.
 - Class address calculator
 - Code Generator (C++ / C#)
 - Module / Section Dumper
-- Linux Support (tested on Ubuntu)
+- Linux Support (tested on Ubuntu 18.04)
 - Debugger with "Find out what writes/accesses this address" support
 - Plugin Support
   - Plugins can be written in different languages (example: C++, C++/CLI, C#)
@@ -45,18 +47,19 @@ This is a port of ReClass to the .NET platform with lots of additional features.
   - Plugins can implement custom nodes with load/save and code generation support
 
 ## Plugins
-- [Sample Plugins](https://github.com/KN4CK3R/ReClass.NET-SamplePlugin)
-- [Frostbite Plugin](https://github.com/KN4CK3R/ReClass.NET-FrostbitePlugin)
-- [MemoryPipe Plugin](https://github.com/KN4CK3R/ReClass.NET-MemoryPipePlugin)
-- [LoadBinary Plugin](https://github.com/KN4CK3R/ReClass.NET-LoadBinaryPlugin)
-- [Handle Abuser Plugin](https://github.com/KN4CK3R/ReClass.NET-HandleAbuser)
-- [Unreal Plugin](https://github.com/DrP3pp3r/ReClass.NET-UnrealPlugin) (by [DrP3pp3r](https://github.com/DrP3pp3r))
+- [Sample Plugins](https://github.com/ReClassNET/ReClass.NET-SamplePlugin)
+- [Frostbite Plugin](https://github.com/ReClassNET/ReClass.NET-FrostbitePlugin)
+- [MemoryPipe Plugin](https://github.com/ReClassNET/ReClass.NET-MemoryPipePlugin)
+- [LoadBinary Plugin](https://github.com/ReClassNET/ReClass.NET-LoadBinaryPlugin)
+- [Handle Abuser Plugin](https://github.com/ReClassNET/ReClass.NET-HandleAbuser)
+- Unreal Plugin (not available anymore) (by [DrP3pp3r](https://github.com/DrP3pp3r))
+- [DriverReader](https://github.com/niemand-sec/ReClass.NET-DriverReader) (by [Niemand](https://github.com/niemand-sec))
 
 To install a plugin just copy it in the "Plugins" folder.
-If you want to develop your own plugin just learn from the code of the [Sample Plugins](https://github.com/KN4CK3R/ReClass.NET-SamplePlugin) and [Frostbite Plugin](https://github.com/KN4CK3R/ReClass.NET-FrostbitePlugin) repositories. If you have developed a nice plugin, leave me a message and I will add it to the list above.
+If you want to develop your own plugin just learn from the code of the [Sample Plugins](https://github.com/ReClassNET/ReClass.NET-SamplePlugin) and [Frostbite Plugin](https://github.com/ReClassNET/ReClass.NET-FrostbitePlugin) repositories. If you have developed a nice plugin, leave me a message and I will add it to the list above.
 
 ## Installation
-Just download the [latest version](https://github.com/KN4CK3R/ReClass.NET/releases) and start the x86 / x64 version or let the launcher decide.
+Just download the [latest version](https://github.com/ReClassNET/ReClass.NET/releases) and start the x86 / x64 version or let the launcher decide.
 
 ## Tips
 - Lots of elements have a context menu. Just right-click it and see what you can do there.
@@ -71,7 +74,7 @@ Just download the [latest version](https://github.com/KN4CK3R/ReClass.NET/releas
   Valid operations are read ([..]), add (+), sub (-), mul (*) and div (/). Please note that all operations are integer calculations.
 
 ## Compiling
-If you want to compile ReClass.NET just fork the repository and open the ReClass.NET.sln file with Visual Studio 2017.
+If you want to compile ReClass.NET just fork the repository and open the ReClass.NET.sln file with Visual Studio 2019.
 Compile the project and copy the dependencies to the output folder.
 
 ## Videos
@@ -89,7 +92,7 @@ Memory Scanner
 ![](https://abload.de/img/scannerytub1.jpg)
 
 Pointer Preview  
-![](http://abload.de/img/memorypreview2gsfp.jpg)
+![](https://abload.de/img/memorypreview2gsfp.jpg)
 
 Code Generator  
 ![](https://abload.de/img/codegeneratorqdat2.jpg)
@@ -107,7 +110,7 @@ Settings
 - DrUnKeN ChEeTaH
 - P47R!CK
 - DogMatt
-- [Dude719](https://github.com/dude719)
+- [ajkhoury](https://github.com/ajkhoury)
 - [IChooseYou](https://github.com/IChooseYou)
 - [stevemk14ebr](https://github.com/stevemk14ebr)
 - [Timboy67678](https://github.com/Timboy67678)
@@ -117,3 +120,4 @@ Settings
 - [buddyfavors](https://github.com/buddyfavors)
 - [DrP3pp3r](https://github.com/DrP3pp3r)
 - [ko1N](https://github.com/ko1N)
+- [Niemand](https://github.com/niemand-sec) (see his talk at [BlackHat Europe 2019 (London) "Unveiling the underground world of Anti-Cheats"](https://www.blackhat.com/eu-19/briefings/schedule/index.html#unveiling-the-underground-world-of-anti-cheats-17358))

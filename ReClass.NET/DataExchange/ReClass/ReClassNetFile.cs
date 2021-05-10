@@ -1,8 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using ReClassNET.DataExchange.ReClass.Legacy;
 using ReClassNET.Nodes;
+using ReClassNET.Project;
 
 namespace ReClassNET.DataExchange.ReClass
 {
@@ -19,23 +21,27 @@ namespace ReClassNET.DataExchange.ReClass
 
 		static ReClassNetFile()
 		{
-			// Obsolete: The name of the class was changed. Because of this older files can't load this nodes.
+			// Obsolete: The name of the class was changed. Because of this older versions can't load these nodes.
 			buildInStringToTypeMap["UTF8TextNode"] = typeof(Utf8TextNode);
 			buildInStringToTypeMap["UTF8TextPtrNode"] = typeof(Utf8TextPtrNode);
 			buildInStringToTypeMap["UTF16TextNode"] = typeof(Utf16TextNode);
 			buildInStringToTypeMap["UTF16TextPtrNode"] = typeof(Utf16TextPtrNode);
 			buildInStringToTypeMap["UTF32TextNode"] = typeof(Utf32TextNode);
 			buildInStringToTypeMap["UTF32TextPtrNode"] = typeof(Utf32TextPtrNode);
+			buildInStringToTypeMap["VTableNode"] = typeof(VirtualMethodTableNode);
+
+			// Legacy
+			buildInStringToTypeMap["ClassInstanceArrayNode"] = typeof(ClassInstanceArrayNode);
+			buildInStringToTypeMap["ClassPtrArrayNode"] = typeof(ClassPointerArrayNode);
+			buildInStringToTypeMap["ClassPtrNode"] = typeof(ClassPointerNode);
 		}
 
 		private static readonly Dictionary<string, Type> buildInStringToTypeMap = new[]
 		{
 			typeof(BoolNode),
 			typeof(BitFieldNode),
-			typeof(ClassInstanceArrayNode),
+			typeof(EnumNode),
 			typeof(ClassInstanceNode),
-			typeof(ClassPtrArrayNode),
-			typeof(ClassPtrNode),
 			typeof(DoubleNode),
 			typeof(FloatNode),
 			typeof(FunctionNode),
@@ -48,6 +54,7 @@ namespace ReClassNET.DataExchange.ReClass
 			typeof(Int16Node),
 			typeof(Int32Node),
 			typeof(Int64Node),
+			typeof(NIntNode),
 			typeof(Matrix3x3Node),
 			typeof(Matrix3x4Node),
 			typeof(Matrix4x4Node),
@@ -55,6 +62,7 @@ namespace ReClassNET.DataExchange.ReClass
 			typeof(UInt16Node),
 			typeof(UInt32Node),
 			typeof(UInt64Node),
+			typeof(NUIntNode),
 			typeof(Utf8TextNode),
 			typeof(Utf8TextPtrNode),
 			typeof(Utf16TextNode),
@@ -64,7 +72,10 @@ namespace ReClassNET.DataExchange.ReClass
 			typeof(Vector2Node),
 			typeof(Vector3Node),
 			typeof(Vector4Node),
-			typeof(VTableNode)
+			typeof(VirtualMethodTableNode),
+			typeof(ArrayNode),
+			typeof(PointerNode),
+			typeof(UnionNode)
 		}.ToDictionary(t => t.Name, t => t);
 
 		private static readonly Dictionary<Type, string> buildInTypeToStringMap = buildInStringToTypeMap.ToDictionary(kv => kv.Value, kv => kv.Key);

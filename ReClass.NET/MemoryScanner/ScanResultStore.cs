@@ -1,10 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Text;
 using ReClassNET.Extensions;
-using ReClassNET.Util;
 
 namespace ReClassNET.MemoryScanner
 {
@@ -130,16 +129,14 @@ namespace ReClassNET.MemoryScanner
 		{
 			Contract.Requires(block != null);
 
-			using (var bw = new BinaryWriter(fileStream, Encoding.Unicode, true))
-			{
-				bw.Write(block.Start);
-				bw.Write(block.End);
-				bw.Write(block.Results.Count);
+			using var bw = new BinaryWriter(fileStream, Encoding.Unicode, true);
+			bw.Write(block.Start);
+			bw.Write(block.End);
+			bw.Write(block.Results.Count);
 
-				foreach (var result in block.Results)
-				{
-					WriteSearchResult(bw, result);
-				}
+			foreach (var result in block.Results)
+			{
+				WriteSearchResult(bw, result);
 			}
 		}
 
@@ -150,28 +147,25 @@ namespace ReClassNET.MemoryScanner
 		{
 			Contract.Ensures(Contract.Result<IEnumerable<ScanResultBlock>>() != null);
 
-			using (var stream = File.OpenRead(storePath))
+			using var stream = File.OpenRead(storePath);
+			using var br = new BinaryReader(stream, Encoding.Unicode);
+
+			var length = stream.Length;
+
+			while (stream.Position < length)
 			{
-				using (var br = new BinaryReader(stream, Encoding.Unicode))
+				var start = br.ReadIntPtr();
+				var end = br.ReadIntPtr();
+
+				var resultCount = br.ReadInt32();
+
+				var results = new List<ScanResult>(resultCount);
+				for (var i = 0; i < resultCount; ++i)
 				{
-					var length = stream.Length;
-
-					while (stream.Position < length)
-					{
-						var start = br.ReadIntPtr();
-						var end = br.ReadIntPtr();
-
-						var resultCount = br.ReadInt32();
-
-						var results = new List<ScanResult>(resultCount);
-						for (var i = 0; i < resultCount; ++i)
-						{
-							results.Add(ReadScanResult(br));
-						}
-
-						yield return new ScanResultBlock(start, end, results);
-					}
+					results.Add(ReadScanResult(br));
 				}
+
+				yield return new ScanResultBlock(start, end, results);
 			}
 		}
 
@@ -212,8 +206,16 @@ namespace ReClassNET.MemoryScanner
 					result = new ArrayOfBytesScanResult(br.ReadBytes(br.ReadInt32()));
 					break;
 				case ScanValueType.String:
-					var encoding = br.ReadInt32();
-					result = new StringScanResult(br.ReadString(), encoding == 0 ? Encoding.UTF8 : encoding == 1 ? Encoding.Unicode : Encoding.UTF32);
+				case ScanValueType.Regex:
+					var encoding = br.ReadInt32() switch
+					{
+						0 => Encoding.UTF8,
+						1 => Encoding.Unicode,
+						_ => Encoding.UTF32
+					};
+					var value = br.ReadString();
+
+					result = valueType == ScanValueType.String ? new StringScanResult(value, encoding) : new RegexStringScanResult(value, encoding);
 					break;
 				default:
 					throw new ArgumentOutOfRangeException();
@@ -261,7 +263,7 @@ namespace ReClassNET.MemoryScanner
 					bw.Write(arrayOfBytesSearchResult.Value);
 					break;
 				case StringScanResult stringSearchResult:
-					bw.Write(stringSearchResult.Encoding == Encoding.UTF8 ? 0 : stringSearchResult.Encoding == Encoding.Unicode ? 1 : 2);
+					bw.Write(stringSearchResult.Encoding.IsSameCodePage(Encoding.UTF8) ? 0 : stringSearchResult.Encoding.IsSameCodePage(Encoding.Unicode) ? 1 : 2);
 					bw.Write(stringSearchResult.Value);
 					break;
 			}

@@ -1,18 +1,19 @@
-﻿using System;
+using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.IO;
 using System.Linq;
-using System.Text;
 using ReClassNET.Extensions;
 using ReClassNET.Logger;
 using ReClassNET.Nodes;
-using ReClassNET.Util;
+using ReClassNET.Project;
 
 namespace ReClassNET.CodeGenerator
 {
-	class CSharpCodeGenerator : ICodeGenerator
+	public class CSharpCodeGenerator : ICodeGenerator
 	{
-		private readonly Dictionary<Type, string> typeToTypedefMap = new Dictionary<Type, string>
+		private static readonly Dictionary<Type, string> nodeTypeToTypeDefinationMap = new Dictionary<Type, string>
 		{
 			[typeof(DoubleNode)] = "double",
 			[typeof(FloatNode)] = "float",
@@ -21,128 +22,256 @@ namespace ReClassNET.CodeGenerator
 			[typeof(Int16Node)] = "short",
 			[typeof(Int32Node)] = "int",
 			[typeof(Int64Node)] = "long",
+			[typeof(NIntNode)] = "IntPtr",
 			[typeof(UInt8Node)] = "byte",
 			[typeof(UInt16Node)] = "ushort",
 			[typeof(UInt32Node)] = "uint",
 			[typeof(UInt64Node)] = "ulong",
+			[typeof(NUIntNode)] = "UIntPtr",
 
 			[typeof(FunctionPtrNode)] = "IntPtr",
 			[typeof(Utf8TextPtrNode)] = "IntPtr",
 			[typeof(Utf16TextPtrNode)] = "IntPtr",
 			[typeof(Utf32TextPtrNode)] = "IntPtr",
-			[typeof(ClassPtrNode)] = "IntPtr",
-			[typeof(VTableNode)] = "IntPtr"
+			[typeof(PointerNode)] = "IntPtr",
+			[typeof(VirtualMethodTableNode)] = "IntPtr",
+
+			[typeof(Vector2Node)] = "Vector2",
+			[typeof(Vector3Node)] = "Vector3",
+			[typeof(Vector4Node)] = "Vector4"
 		};
 
 		public Language Language => Language.CSharp;
 
-		public string GenerateCode(IEnumerable<ClassNode> classes, ILogger logger)
+		public string GenerateCode(IReadOnlyList<ClassNode> classes, IReadOnlyList<EnumDescription> enums, ILogger logger)
 		{
-			var sb = new StringBuilder();
-			sb.AppendLine($"// Created with {Constants.ApplicationName} by {Constants.Author}");
-			sb.AppendLine();
-			sb.AppendLine("// Warning: The code doesn't contain arrays and instances!");
-			sb.AppendLine();
-			sb.AppendLine("using System.Runtime.InteropServices;");
-			sb.AppendLine();
+			using var sw = new StringWriter();
+			using var iw = new IndentedTextWriter(sw, "\t");
 
-			sb.Append(
-				string.Join(
-					Environment.NewLine + Environment.NewLine,
-					classes.Select(c =>
-					{
-						var csb = new StringBuilder();
+			iw.WriteLine($"// Created with {Constants.ApplicationName} {Constants.ApplicationVersion} by {Constants.Author}");
+			iw.WriteLine();
+			iw.WriteLine("// Warning: The C# code generator doesn't support all node types!");
+			iw.WriteLine();
+			iw.WriteLine("using System.Runtime.InteropServices;");
 
-						csb.AppendLine("[StructLayout(LayoutKind.Explicit)]");
-						csb.Append($"struct {c.Name}");
-						if (!string.IsNullOrEmpty(c.Comment))
-						{
-							csb.Append($" // {c.Comment}");
-						}
-						csb.AppendLine();
+			iw.WriteLine("// optional namespace, only for vectors");
+			iw.WriteLine("using System.Numerics;");
+			iw.WriteLine();
 
-						csb.AppendLine("{");
-
-						csb.AppendLine(
-							string.Join(
-								Environment.NewLine + Environment.NewLine,
-								YieldMemberDefinitions(c.Nodes, logger)
-									.Select(m => $"\t{GetFieldDecorator(m)}{Environment.NewLine}\t{GetFieldDefinition(m)}")
-							)
-						);
-						csb.Append("}");
-						return csb.ToString();
-					})
-				)
-			);
-
-			return sb.ToString();
-		}
-
-		private IEnumerable<MemberDefinition> YieldMemberDefinitions(IEnumerable<BaseNode> members, ILogger logger)
-		{
-			Contract.Requires(members != null);
-			Contract.Requires(Contract.ForAll(members, m => m != null));
-			Contract.Ensures(Contract.Result<IEnumerable<MemberDefinition>>() != null);
-			Contract.Ensures(Contract.ForAll(Contract.Result<IEnumerable<MemberDefinition>>(), d => d != null));
-
-			foreach (var member in members.WhereNot(n => n is BaseHexNode))
+			using (var en = enums.GetEnumerator())
 			{
-				if (member is BitFieldNode bitFieldNode)
+				if (en.MoveNext())
 				{
-					string type;
-					switch (bitFieldNode.Bits)
+					WriteEnum(iw, en.Current);
+
+					while (en.MoveNext())
 					{
-						default:
-							type = typeToTypedefMap[typeof(UInt8Node)];
-							break;
-						case 16:
-							type = typeToTypedefMap[typeof(UInt16Node)];
-							break;
-						case 32:
-							type = typeToTypedefMap[typeof(UInt32Node)];
-							break;
-						case 64:
-							type = typeToTypedefMap[typeof(UInt64Node)];
-							break;
+						iw.WriteLine();
+
+						WriteEnum(iw, en.Current);
 					}
 
-					yield return new MemberDefinition(member, type);
+					iw.WriteLine();
 				}
-				else
+			}
+
+			var classesToWrite = classes
+				.Where(c => c.Nodes.None(n => n is FunctionNode)) // Skip class which contains FunctionNodes because these are not data classes.
+				.Distinct();
+
+			var unicodeStringClassLengthsToGenerate = new HashSet<int>();
+
+			using (var en = classesToWrite.GetEnumerator())
+			{
+				if (en.MoveNext())
 				{
-					if (typeToTypedefMap.TryGetValue(member.GetType(), out var type))
+					void FindUnicodeStringClasses(IEnumerable<BaseNode> nodes)
 					{
-						yield return new MemberDefinition(member, type);
+						unicodeStringClassLengthsToGenerate.UnionWith(nodes.OfType<Utf16TextNode>().Select(n => n.Length));
 					}
-					else
+
+					FindUnicodeStringClasses(en.Current!.Nodes);
+
+					WriteClass(iw, en.Current, logger);
+
+					while (en.MoveNext())
 					{
-						var generator = CustomCodeGenerator.GetGenerator(member, Language);
-						if (generator != null)
-						{
-							yield return generator.GetMemberDefinition(member, Language, logger);
+						iw.WriteLine();
 
-							continue;
-						}
+						FindUnicodeStringClasses(en.Current!.Nodes);
 
-						logger.Log(LogLevel.Error, $"Skipping node with unhandled type: {member.GetType()}");
+						WriteClass(iw, en.Current, logger);
 					}
 				}
 			}
+
+			if (unicodeStringClassLengthsToGenerate.Any())
+			{
+				foreach (var length in unicodeStringClassLengthsToGenerate)
+				{
+					iw.WriteLine();
+
+					WriteUnicodeStringClass(iw, length);
+				}
+			}
+
+			return sw.ToString();
 		}
 
-		private string GetFieldDecorator(MemberDefinition member)
+		/// <summary>
+		/// Outputs the C# code for the given enum to the <see cref="TextWriter"/> instance.
+		/// </summary>
+		/// <param name="writer">The writer to output to.</param>
+		/// <param name="enum">The enum to output.</param>
+		private static void WriteEnum(IndentedTextWriter writer, EnumDescription @enum)
 		{
-			Contract.Requires(member != null);
+			Contract.Requires(writer != null);
+			Contract.Requires(@enum != null);
 
-			return $"[FieldOffset({member.Offset})]";
+			writer.Write($"enum {@enum.Name} : ");
+			switch (@enum.Size)
+			{
+				case EnumDescription.UnderlyingTypeSize.OneByte:
+					writer.WriteLine(nodeTypeToTypeDefinationMap[typeof(Int8Node)]);
+					break;
+				case EnumDescription.UnderlyingTypeSize.TwoBytes:
+					writer.WriteLine(nodeTypeToTypeDefinationMap[typeof(Int16Node)]);
+					break;
+				case EnumDescription.UnderlyingTypeSize.FourBytes:
+					writer.WriteLine(nodeTypeToTypeDefinationMap[typeof(Int32Node)]);
+					break;
+				case EnumDescription.UnderlyingTypeSize.EightBytes:
+					writer.WriteLine(nodeTypeToTypeDefinationMap[typeof(Int64Node)]);
+					break;
+			}
+			writer.WriteLine("{");
+			writer.Indent++;
+			for (var j = 0; j < @enum.Values.Count; ++j)
+			{
+				var kv = @enum.Values[j];
+
+				writer.Write(kv.Key);
+				writer.Write(" = ");
+				writer.Write(kv.Value);
+				if (j < @enum.Values.Count - 1)
+				{
+					writer.Write(",");
+				}
+				writer.WriteLine();
+			}
+			writer.Indent--;
+			writer.WriteLine("};");
 		}
 
-		private string GetFieldDefinition(MemberDefinition member)
+		/// <summary>
+		/// Outputs the C# code for the given class to the <see cref="TextWriter"/> instance.
+		/// </summary>
+		/// <param name="writer">The writer to output to.</param>
+		/// <param name="class">The class to output.</param>
+		/// <param name="logger">The logger.</param>
+		private static void WriteClass(IndentedTextWriter writer, ClassNode @class, ILogger logger)
 		{
-			Contract.Requires(member != null);
+			Contract.Requires(writer != null);
+			Contract.Requires(@class != null);
+			Contract.Requires(logger != null);
 
-			return $"public {member.Type} {member.Name}; //0x{member.Offset:X04} {member.Comment}".Trim();
+			writer.WriteLine("[StructLayout(LayoutKind.Explicit, CharSet = CharSet.Ansi)]");
+			writer.Write("public struct ");
+			writer.Write(@class.Name);
+
+			if (!string.IsNullOrEmpty(@class.Comment))
+			{
+				writer.Write(" // ");
+				writer.Write(@class.Comment);
+			}
+
+			writer.WriteLine();
+
+			writer.WriteLine("{");
+			writer.Indent++;
+
+			var nodes = @class.Nodes
+				.WhereNot(n => n is FunctionNode || n is BaseHexNode);
+			foreach (var node in nodes)
+			{
+				var (type, attribute) = GetTypeDefinition(node);
+				if (type != null)
+				{
+					if (attribute != null)
+					{
+						writer.WriteLine(attribute);
+					}
+
+					writer.WriteLine($"[FieldOffset(0x{node.Offset:X})]");
+					writer.Write($"public readonly {type} {node.Name};");
+					if (!string.IsNullOrEmpty(node.Comment))
+					{
+						writer.Write(" //");
+						writer.Write(node.Comment);
+					}
+					writer.WriteLine();
+				}
+				else
+				{
+					logger.Log(LogLevel.Warning, $"Skipping node with unhandled type: {node.GetType()}");
+				}
+			}
+
+			writer.Indent--;
+			writer.WriteLine("}");
+		}
+
+		/// <summary>
+		/// Gets the type definition for the given node. If the node is not expressible <c>null</c> as typename is returned.
+		/// </summary>
+		/// <param name="node">The target node.</param>
+		/// <returns>The type definition for the node or null as typename if the node is not expressible.</returns>
+		private static (string typeName, string attribute) GetTypeDefinition(BaseNode node)
+		{
+			Contract.Requires(node != null);
+
+			if (node is BitFieldNode bitFieldNode)
+			{
+				var underlayingNode = bitFieldNode.GetUnderlayingNode();
+				underlayingNode.CopyFromNode(node);
+				node = underlayingNode;
+			}
+
+			if (nodeTypeToTypeDefinationMap.TryGetValue(node.GetType(), out var type))
+			{
+				return (type, null);
+			}
+
+			return node switch
+			{
+				EnumNode enumNode => (enumNode.Enum.Name, null),
+				Utf8TextNode utf8TextNode => ("string", $"[MarshalAs(UnmanagedType.ByValTStr, SizeConst = {utf8TextNode.Length})]"),
+				Utf16TextNode utf16TextNode => (GetUnicodeStringClassName(utf16TextNode.Length), "[MarshalAs(UnmanagedType.Struct)]"),
+				_ => (null, null)
+			};
+		}
+
+		private static string GetUnicodeStringClassName(int length) => $"__UnicodeString{length}";
+
+		/// <summary>
+		/// Writes a helper class for unicode strings with the specific length.
+		/// </summary>
+		/// <param name="writer">The writer to output to.</param>
+		/// <param name="length">The string length for this class.</param>
+		private static void WriteUnicodeStringClass(IndentedTextWriter writer, int length)
+		{
+			var className = GetUnicodeStringClassName(length);
+
+			writer.WriteLine("[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]");
+			writer.WriteLine($"public struct {className}");
+			writer.WriteLine("{");
+			writer.Indent++;
+			writer.WriteLine($"[MarshalAs(UnmanagedType.ByValTStr, SizeConst = {length})]");
+			writer.WriteLine("public string Value;");
+			writer.WriteLine();
+			writer.WriteLine($"public static implicit operator string({className} value) => value.Value;");
+			writer.Indent--;
+			writer.WriteLine("}");
 		}
 	}
 }

@@ -1,67 +1,72 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Text;
+using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
 	public abstract class BaseTextPtrNode : BaseNode
 	{
+		private const int MaxStringCharacterCount = 256;
+
 		public override int MemorySize => IntPtr.Size;
 
 		/// <summary>The encoding of the string.</summary>
 		public abstract Encoding Encoding { get; }
 
 		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
+		/// <param name="context">The drawing context.</param>
 		/// <param name="x">The x coordinate.</param>
 		/// <param name="y">The y coordinate.</param>
 		/// <param name="type">The name of the type.</param>
 		/// <returns>The pixel size the node occupies.</returns>
-		public Size DrawText(ViewInfo view, int x, int y, string type)
+		public Size DrawText(DrawContext context, int x, int y, string type)
 		{
-			Contract.Requires(view != null);
+			Contract.Requires(context != null);
 			Contract.Requires(type != null);
 
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
 
-			var ptr = view.Memory.ReadIntPtr(Offset);
-			var text = view.Memory.Process.ReadRemoteString(Encoding, ptr, 64 * Encoding.GetSimpleByteCountPerChar());
-
-			DrawInvalidMemoryIndicator(view, y);
+			var ptr = context.Memory.ReadIntPtr(Offset);
+			var text = context.Process.ReadRemoteString(ptr, Encoding, MaxStringCharacterCount);
 
 			var origX = x;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding;
-			x = AddIcon(view, x, y, Icons.Text, HotSpot.NoneId, HotSpotType.None);
-			x = AddAddressOffset(view, x, y);
+			x = AddIconPadding(context, x);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, type) + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name) + view.Font.Width;
+			x = AddIcon(context, x, y, context.IconProvider.Text, HotSpot.NoneId, HotSpotType.None);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TextColor, HotSpot.NoneId, "= '");
-			x = AddText(view, x, y, view.Settings.TextColor, HotSpot.NoneId, text);
-			x = AddText(view, x, y, view.Settings.TextColor, HotSpot.NoneId, "'") + view.Font.Width;
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, type) + context.Font.Width;
+			if (!IsWrapped)
+			{
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name) + context.Font.Width;
+			}
 
-			x = AddComment(view, x, y);
+			x = AddText(context, x, y, context.Settings.TextColor, HotSpot.NoneId, "= '");
+			x = AddText(context, x, y, context.Settings.TextColor, HotSpot.ReadOnlyId, text);
+			x = AddText(context, x, y, context.Settings.TextColor, HotSpot.NoneId, "'") + context.Font.Width;
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
+			x = AddComment(context, x, y);
 
-			return new Size(x - origX, view.Font.Height);
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
+
+			return new Size(x - origX, context.Font.Height);
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			return IsHidden ? HiddenHeight : view.Font.Height;
+			return IsHidden && !IsWrapped ? HiddenHeight : context.Font.Height;
 		}
 	}
 }

@@ -1,66 +1,54 @@
-﻿// Design taken from https://github.com/pieterderycke/Jace
-
-using System;
+﻿using System;
 using System.Diagnostics.Contracts;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
-using ReClassNET.Util;
 
 namespace ReClassNET.AddressParser
 {
-	class Interpreter
+	public class Interpreter : IExecutor
 	{
-		public IntPtr Execute(IOperation operation, RemoteProcess process)
+		public IntPtr Execute(IExpression expression, IProcessReader processReader)
 		{
-			Contract.Requires(operation != null);
-			Contract.Requires(process != null);
+			Contract.Requires(expression != null);
+			Contract.Requires(processReader != null);
 
-			if (operation is OffsetOperation offsetOperation)
+			switch (expression)
 			{
-				return offsetOperation.Value;
-			}
-
-			if (operation is ModuleOffsetOperation moduleOffsetOperation)
-			{
-				var module = process.GetModuleByName(moduleOffsetOperation.Name);
-				if (module != null)
+				case ConstantExpression constantExpression:
+					return IntPtrExtension.From(constantExpression.Value);
+				case NegateExpression negateExpression:
+					return Execute(negateExpression.Expression, processReader).Negate();
+				case ModuleExpression moduleExpression:
 				{
-					return module.Start;
+					var module = processReader.GetModuleByName(moduleExpression.Name);
+					if (module != null)
+					{
+						return module.Start;
+					}
+
+					return IntPtr.Zero;
 				}
-
-				return IntPtr.Zero;
+				case AddExpression addExpression:
+					return Execute(addExpression.Lhs, processReader).Add(Execute(addExpression.Rhs, processReader));
+				case SubtractExpression subtractExpression:
+					return Execute(subtractExpression.Lhs, processReader).Sub(Execute(subtractExpression.Rhs, processReader));
+				case MultiplyExpression multiplyExpression:
+					return Execute(multiplyExpression.Lhs, processReader).Mul(Execute(multiplyExpression.Rhs, processReader));
+				case DivideExpression divideExpression:
+					return Execute(divideExpression.Lhs, processReader).Div(Execute(divideExpression.Rhs, processReader));
+				case ReadMemoryExpression readMemoryExpression:
+					var readFromAddress = Execute(readMemoryExpression.Expression, processReader);
+					if (readMemoryExpression.ByteCount == 4)
+					{
+						return IntPtrExtension.From(processReader.ReadRemoteInt32(readFromAddress));
+					}
+					else
+					{
+						return IntPtrExtension.From(processReader.ReadRemoteInt64(readFromAddress));
+					}
+				default:
+					throw new ArgumentException($"Unsupported operation '{expression.GetType().FullName}'.");
 			}
-
-			if (operation is AdditionOperation additionOperation)
-			{
-				var addition = additionOperation;
-				return Execute(addition.Argument1, process).Add(Execute(addition.Argument2, process));
-			}
-
-			if (operation is SubtractionOperation subtractionOperation)
-			{
-				var addition = subtractionOperation;
-				return Execute(addition.Argument1, process).Sub(Execute(addition.Argument2, process));
-			}
-
-			if (operation is MultiplicationOperation multiplicationOperation)
-			{
-				var multiplication = multiplicationOperation;
-				return Execute(multiplication.Argument1, process).Mul(Execute(multiplication.Argument2, process));
-			}
-
-			if (operation is DivisionOperation divisionOperation)
-			{
-				var division = divisionOperation;
-				return Execute(division.Dividend, process).Div(Execute(division.Divisor, process));
-			}
-
-			if (operation is ReadPointerOperation pointerOperation)
-			{
-				return process.ReadRemoteIntPtr(Execute(pointerOperation.Argument, process));
-			}
-
-			throw new ArgumentException($"Unsupported operation '{operation.GetType().FullName}'.");
 		}
 	}
 }

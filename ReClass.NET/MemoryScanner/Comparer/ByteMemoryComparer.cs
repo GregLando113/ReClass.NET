@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
-using ReClassNET.Util;
+using System;
+using System.Diagnostics;
 
 namespace ReClassNET.MemoryScanner.Comparer
 {
-	public class ByteMemoryComparer : IScanComparer
+	public class ByteMemoryComparer : ISimpleScanComparer
 	{
 		public ScanCompareType CompareType { get; }
 		public byte Value1 { get; }
@@ -14,59 +14,30 @@ namespace ReClassNET.MemoryScanner.Comparer
 		{
 			CompareType = compareType;
 
-			if (compareType == ScanCompareType.Between || compareType == ScanCompareType.BetweenOrEqual)
-			{
-				if (value1 > value2)
-				{
-					Utils.Swap(ref value1, ref value2);
-				}
-			}
-
 			Value1 = value1;
 			Value2 = value2;
 		}
 
 		public bool Compare(byte[] data, int index, out ScanResult result)
 		{
-			result = null;
-
-			var value = data[index];
-
-			bool IsMatch()
-			{
-				switch (CompareType)
+			return CompareInternal(
+				data,
+				index,
+				value => CompareType switch
 				{
-					case ScanCompareType.Equal:
-						return value == Value1;
-					case ScanCompareType.NotEqual:
-						return value != Value1;
-					case ScanCompareType.GreaterThan:
-						return value > Value1;
-					case ScanCompareType.GreaterThanOrEqual:
-						return value >= Value1;
-					case ScanCompareType.LessThan:
-						return value < Value1;
-					case ScanCompareType.LessThanOrEqual:
-						return value <= Value1;
-					case ScanCompareType.Between:
-						return Value1 < value && value < Value2;
-					case ScanCompareType.BetweenOrEqual:
-						return Value1 <= value && value <= Value2;
-					case ScanCompareType.Unknown:
-						return true;
-					default:
-						throw new InvalidCompareTypeException(CompareType);
-				}
-			}
-
-			if (!IsMatch())
-			{
-				return false;
-			}
-
-			result = new ByteScanResult(value);
-
-			return true;
+					ScanCompareType.Equal => value == Value1,
+					ScanCompareType.NotEqual => value != Value1,
+					ScanCompareType.GreaterThan => value > Value1,
+					ScanCompareType.GreaterThanOrEqual => value >= Value1,
+					ScanCompareType.LessThan => value < Value1,
+					ScanCompareType.LessThanOrEqual => value <= Value1,
+					ScanCompareType.Between => Value1 < value && value < Value2,
+					ScanCompareType.BetweenOrEqual => Value1 <= value && value <= Value2,
+					ScanCompareType.Unknown => true,
+					_ => throw new InvalidCompareTypeException(CompareType)
+				},
+				out result
+			);
 		}
 
 		public bool Compare(byte[] data, int index, ScanResult previous, out ScanResult result)
@@ -80,48 +51,51 @@ namespace ReClassNET.MemoryScanner.Comparer
 
 		public bool Compare(byte[] data, int index, ByteScanResult previous, out ScanResult result)
 		{
+			return CompareInternal(
+				data,
+				index,
+				value => CompareType switch
+				{
+					ScanCompareType.Equal => value == Value1,
+					ScanCompareType.NotEqual => value != Value1,
+					ScanCompareType.GreaterThan => value > Value1,
+					ScanCompareType.GreaterThanOrEqual => value >= Value1,
+					ScanCompareType.LessThan => value < Value1,
+					ScanCompareType.LessThanOrEqual => value <= Value1,
+					ScanCompareType.Between => Value1 < value && value < Value2,
+					ScanCompareType.BetweenOrEqual => Value1 <= value && value <= Value2,
+					ScanCompareType.Changed => value != previous.Value,
+					ScanCompareType.NotChanged => value == previous.Value,
+					ScanCompareType.Increased => value > previous.Value,
+					ScanCompareType.IncreasedOrEqual => value >= previous.Value,
+					ScanCompareType.Decreased => value < previous.Value,
+					ScanCompareType.DecreasedOrEqual => value <= previous.Value,
+					_ => throw new InvalidCompareTypeException(CompareType)
+				},
+				out result
+			);
+		}
+
+		private static bool CompareInternal(byte[] data, int index, Func<short, bool> matcher, out ScanResult result)
+		{
 			result = null;
+
+			if (data == null)
+			{
+				throw new ArgumentNullException(nameof(data));
+			}
+			if ((uint)index >= data.Length)
+			{
+				throw new ArgumentOutOfRangeException(nameof(index));
+			}
+			if (index > data.Length - 1)
+			{
+				throw new ArgumentException();
+			}
 
 			var value = data[index];
 
-			bool IsMatch()
-			{
-				switch (CompareType)
-				{
-					case ScanCompareType.Equal:
-						return value == Value1;
-					case ScanCompareType.NotEqual:
-						return value != Value1;
-					case ScanCompareType.Changed:
-						return value != previous.Value;
-					case ScanCompareType.NotChanged:
-						return value == previous.Value;
-					case ScanCompareType.GreaterThan:
-						return value > Value1;
-					case ScanCompareType.GreaterThanOrEqual:
-						return value >= Value1;
-					case ScanCompareType.Increased:
-						return value > previous.Value;
-					case ScanCompareType.IncreasedOrEqual:
-						return value >= previous.Value;
-					case ScanCompareType.LessThan:
-						return value < Value1;
-					case ScanCompareType.LessThanOrEqual:
-						return value <= Value1;
-					case ScanCompareType.Decreased:
-						return value < previous.Value;
-					case ScanCompareType.DecreasedOrEqual:
-						return value <= previous.Value;
-					case ScanCompareType.Between:
-						return Value1 < value && value < Value2;
-					case ScanCompareType.BetweenOrEqual:
-						return Value1 <= value && value <= Value2;
-					default:
-						throw new InvalidCompareTypeException(CompareType);
-				}
-			}
-
-			if (!IsMatch())
+			if (!matcher(value))
 			{
 				return false;
 			}

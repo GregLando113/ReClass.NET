@@ -1,39 +1,73 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
+using System.ComponentModel;
 using System.Diagnostics.Contracts;
-using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using ReClassNET.AddressParser;
 using ReClassNET.CodeGenerator;
+using ReClassNET.Controls;
 using ReClassNET.Core;
 using ReClassNET.DataExchange.ReClass;
 using ReClassNET.Extensions;
-using ReClassNET.Logger;
 using ReClassNET.Memory;
+using ReClassNET.MemoryScanner;
+using ReClassNET.MemoryScanner.Comparer;
 using ReClassNET.Nodes;
 using ReClassNET.Plugins;
+using ReClassNET.Project;
 using ReClassNET.UI;
 using ReClassNET.Util;
+using ReClassNET.Util.Conversion;
 
 namespace ReClassNET.Forms
 {
 	public partial class MainForm : IconForm
 	{
 		private readonly PluginManager pluginManager;
+		private readonly IconProvider iconProvider = new IconProvider();
 
 		private ReClassNetProject currentProject;
 		public ReClassNetProject CurrentProject => currentProject;
+
+		private ClassNode currentClassNode;
+
+		private readonly MemoryBuffer memoryViewBuffer = new MemoryBuffer();
 
 		private Task updateProcessInformationsTask;
 		private Task loadSymbolsTask;
 		private CancellationTokenSource loadSymbolsTaskToken;
 
-		public ClassNodeView ClassView => classesView;
+		public ProjectView ProjectView => projectView;
 
 		public MenuStrip MainMenu => mainMenuStrip;
+
+		public ClassNode CurrentClassNode
+		{
+			get => currentClassNode;
+			set
+			{
+				currentClassNode = value;
+
+				projectView.SelectedClass = value;
+
+				memoryViewControl.Reset();
+				memoryViewControl.Invalidate();
+			}
+		}
+
+		private void UpdateWindowTitle(string extra = null)
+		{
+			var title = $"{(Program.Settings.RandomizeWindowTitle ? Utils.RandomString(Program.GlobalRandom.Next(15, 20)) : Constants.ApplicationName)} ({Constants.Platform})";
+			if (!string.IsNullOrEmpty(extra))
+			{
+				title += $" - {extra}";
+			}
+			Text = title;
+		}
 
 		public MainForm()
 		{
@@ -41,28 +75,23 @@ namespace ReClassNET.Forms
 			Contract.Ensures(currentProject != null);
 
 			InitializeComponent();
-
-			Text = $"{Constants.ApplicationName} ({Constants.Platform})";
+			UpdateWindowTitle();
 
 			mainMenuStrip.Renderer = new CustomToolStripProfessionalRenderer(true, true);
 			toolStrip.Renderer = new CustomToolStripProfessionalRenderer(true, false);
+			isLittleEndianToolStripMenuItem.Checked = BitConverter.IsLittleEndian;
 
 			Program.RemoteProcess.ProcessAttached += sender =>
 			{
 				var text = $"{sender.UnderlayingProcess.Name} (ID: {sender.UnderlayingProcess.Id.ToString()})";
-
-				Text = $"{Constants.ApplicationName} ({Constants.Platform}) - {text}";
 				processInfoToolStripStatusLabel.Text = text;
+				UpdateWindowTitle(text);
+
 			};
 			Program.RemoteProcess.ProcessClosed += sender =>
 			{
-				Text = $"{Constants.ApplicationName} ({Constants.Platform})";
+				UpdateWindowTitle();
 				processInfoToolStripStatusLabel.Text = "No process selected";
-			};
-
-			memoryViewControl.Memory = new MemoryBuffer
-			{
-				Process = Program.RemoteProcess
 			};
 
 			pluginManager = new PluginManager(new DefaultPluginHost(this, Program.RemoteProcess, Program.Logger));
@@ -75,6 +104,9 @@ namespace ReClassNET.Forms
 			GlobalWindowManager.AddWindow(this);
 
 			pluginManager.LoadAllPlugins(Path.Combine(Application.StartupPath, Constants.PluginsFolder), Program.Logger);
+
+			toolStrip.Items.AddRange(NodeTypesBuilder.CreateToolStripButtons(ReplaceSelectedNodesWithType).ToArray());
+			changeTypeToolStripMenuItem.DropDownItems.AddRange(NodeTypesBuilder.CreateToolStripMenuItems(ReplaceSelectedNodesWithType, false).ToArray());
 
 			var createDefaultProject = true;
 
@@ -114,8 +146,6 @@ namespace ReClassNET.Forms
 			base.OnFormClosed(e);
 		}
 
-		#region Event Handler
-
 		private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)
 		{
 			// Stop the update timer
@@ -138,7 +168,7 @@ namespace ReClassNET.Forms
 					}
 					catch
 					{
-
+						// ignored
 					}
 
 					loadSymbolsTask = null;
@@ -152,7 +182,7 @@ namespace ReClassNET.Forms
 					}
 					catch
 					{
-
+						// ignored
 					}
 
 					updateProcessInformationsTask = null;
@@ -231,11 +261,23 @@ namespace ReClassNET.Forms
 			}
 		}
 
+		private void goToClassToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			using var csf = new ClassSelectionForm(currentProject.Classes.OrderBy(c => c.Name));
+
+			if (csf.ShowDialog() == DialogResult.OK)
+			{
+				var selectedClassNode = csf.SelectedClass;
+				if (selectedClassNode != null)
+				{
+					projectView.SelectedClass = selectedClassNode;
+				}
+			}
+		}
+
 		private void clearProjectToolStripMenuItem_Click(object sender, EventArgs e)
 		{
 			SetProject(new ReClassNetProject());
-
-			memoryViewControl.ClassNode = null;
 		}
 
 		private void saveToolStripMenuItem_Click(object sender, EventArgs e)
@@ -263,34 +305,32 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			using (var sfd = new SaveFileDialog())
+			using var sfd = new SaveFileDialog
 			{
-				sfd.DefaultExt = ReClassNetFile.FileExtension;
-				sfd.Filter = $"{ReClassNetFile.FormatName} (*{ReClassNetFile.FileExtension})|*{ReClassNetFile.FileExtension}";
+				DefaultExt = ReClassNetFile.FileExtension,
+				Filter = $"{ReClassNetFile.FormatName} (*{ReClassNetFile.FileExtension})|*{ReClassNetFile.FileExtension}"
+			};
 
-				if (sfd.ShowDialog() == DialogResult.OK)
-				{
-					currentProject.Path = sfd.FileName;
+			if (sfd.ShowDialog() == DialogResult.OK)
+			{
+				currentProject.Path = sfd.FileName;
 
-					saveToolStripMenuItem_Click(sender, e);
-				}
+				saveToolStripMenuItem_Click(sender, e);
 			}
 		}
 
 		private void settingsToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			using (var sd = new SettingsForm(Program.Settings))
-			{
-				sd.ShowDialog();
-			}
+			using var sd = new SettingsForm(Program.Settings, CurrentProject.TypeMapping);
+
+			sd.ShowDialog();
 		}
 
 		private void pluginsToolStripButton_Click(object sender, EventArgs e)
 		{
-			using (var pf = new PluginForm(pluginManager))
-			{
-				pf.ShowDialog();
-			}
+			using var pf = new PluginForm(pluginManager);
+
+			pf.ShowDialog();
 		}
 
 		private void quitToolStripMenuItem_Click(object sender, EventArgs e)
@@ -300,12 +340,12 @@ namespace ReClassNET.Forms
 
 		private void memoryViewerToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			new ProcessInfoForm().Show();
+			new ProcessInfoForm(Program.RemoteProcess).Show();
 		}
 
 		private void memorySearcherToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			new ScannerForm().Show();
+			new ScannerForm(Program.RemoteProcess).Show();
 		}
 
 		private void namedAddressesToolStripMenuItem_Click(object sender, EventArgs e)
@@ -313,22 +353,28 @@ namespace ReClassNET.Forms
 			new NamedAddressesForm(Program.RemoteProcess).Show();
 		}
 
+		private void isLittleEndianToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			Program.RemoteProcess.BitConverter = isLittleEndianToolStripMenuItem.Checked ? (EndianBitConverter)EndianBitConverter.Little : EndianBitConverter.Big;
+		}
+
 		private void loadSymbolToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			using (var ofd = new OpenFileDialog())
+			using var ofd = new OpenFileDialog
 			{
-				ofd.Filter = "Program Debug Database (*.pdb)|*.pdb|All Files (*.*)|*.*";
+				Filter = "Program Debug Database (*.pdb)|*.pdb|All Files (*.*)|*.*"
+			};
 
-				if (ofd.ShowDialog() == DialogResult.OK)
+
+			if (ofd.ShowDialog() == DialogResult.OK)
+			{
+				try
 				{
-					try
-					{
-						Program.RemoteProcess.Symbols.LoadSymbolsFromPDB(ofd.FileName);
-					}
-					catch (Exception ex)
-					{
-						Program.Logger.Log(ex);
-					}
+					Program.RemoteProcess.Symbols.LoadSymbolsFromPDB(ofd.FileName);
+				}
+				catch (Exception ex)
+				{
+					Program.Logger.Log(ex);
 				}
 			}
 		}
@@ -365,20 +411,19 @@ namespace ReClassNET.Forms
 
 		private void generateCppCodeToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			ShowCodeForm(new CppCodeGenerator());
+			ShowCodeGeneratorForm(new CppCodeGenerator(currentProject.TypeMapping));
 		}
 
 		private void generateCSharpCodeToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			ShowCodeForm(new CSharpCodeGenerator());
+			ShowCodeGeneratorForm(new CSharpCodeGenerator());
 		}
 
 		private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			using (var af = new AboutForm())
-			{
-				af.ShowDialog();
-			}
+			using var af = new AboutForm();
+
+			af.ShowDialog();
 		}
 
 		#endregion
@@ -387,18 +432,17 @@ namespace ReClassNET.Forms
 
 		private void attachToProcessToolStripSplitButton_ButtonClick(object sender, EventArgs e)
 		{
-			using (var pb = new ProcessBrowserForm(Program.Settings.LastProcess))
-			{
-				if (pb.ShowDialog() == DialogResult.OK)
-				{
-					if (pb.SelectedProcess != null)
-					{
-						AttachToProcess(pb.SelectedProcess);
+			using var pb = new ProcessBrowserForm(Program.Settings.LastProcess);
 
-						if (pb.LoadSymbols)
-						{
-							LoadAllSymbolsForCurrentProcess();
-						}
+			if (pb.ShowDialog() == DialogResult.OK)
+			{
+				if (pb.SelectedProcess != null)
+				{
+					AttachToProcess(pb.SelectedProcess);
+
+					if (pb.LoadSymbols)
+					{
+						LoadAllSymbolsForCurrentProcess();
 					}
 				}
 			}
@@ -415,8 +459,63 @@ namespace ReClassNET.Forms
 				Program.CoreFunctions.EnumerateProcesses()
 					.OrderBy(p => p.Name).ThenBy(p => p.Id, IntPtrComparer.Instance)
 					.Select(p => new ToolStripMenuItem($"[{p.Id}] {p.Name}", p.Icon, (sender2, e2) => AttachToProcess(p)))
+					.Cast<ToolStripItem>()
 					.ToArray()
 			);
+		}
+
+		private void selectedNodeContextMenuStrip_Opening(object sender, CancelEventArgs e)
+		{
+			var selectedNodes = memoryViewControl.GetSelectedNodes();
+
+			var count = selectedNodes.Count;
+			var node = selectedNodes.Select(s => s.Node).FirstOrDefault();
+			var parentNode = node?.GetParentContainer();
+
+			var nodeIsClass = node is ClassNode;
+			var nodeIsSearchableValueNode = node switch
+			{
+				BaseHexNode _ => true,
+				FloatNode _ => true,
+				DoubleNode _ => true,
+				Int8Node _ => true,
+				UInt8Node _ => true,
+				Int16Node _ => true,
+				UInt16Node _ => true,
+				Int32Node _ => true,
+				UInt32Node _ => true,
+				Int64Node _ => true,
+				UInt64Node _ => true,
+				NIntNode _ => true,
+				NUIntNode _ => true,
+				Utf8TextNode _ => true,
+				Utf16TextNode _ => true,
+				Utf32TextNode _ => true,
+				_ => false
+			};
+
+			addBytesToolStripMenuItem.Enabled = parentNode != null || nodeIsClass;
+			insertBytesToolStripMenuItem.Enabled = count == 1 && parentNode != null;
+
+			changeTypeToolStripMenuItem.Enabled = count > 0 && !nodeIsClass;
+
+			createClassFromNodesToolStripMenuItem.Enabled = count > 0 && !nodeIsClass;
+			dissectNodesToolStripMenuItem.Enabled = count > 0 && !nodeIsClass;
+			searchForEqualValuesToolStripMenuItem.Enabled = count == 1 && nodeIsSearchableValueNode;
+
+			pasteNodesToolStripMenuItem.Enabled = count == 1 && ReClassClipboard.ContainsNodes;
+			removeToolStripMenuItem.Enabled = !nodeIsClass;
+
+			copyAddressToolStripMenuItem.Enabled = !nodeIsClass;
+
+			showCodeOfClassToolStripMenuItem.Enabled = nodeIsClass;
+			shrinkClassToolStripMenuItem.Enabled = nodeIsClass;
+
+			hideNodesToolStripMenuItem.Enabled = selectedNodes.All(h => !(h.Node is ClassNode));
+
+			unhideChildNodesToolStripMenuItem.Enabled = count == 1 && node is BaseContainerNode bcn && bcn.Nodes.Any(n => n.IsHidden);
+			unhideNodesAboveToolStripMenuItem.Enabled = count == 1 && parentNode != null && parentNode.TryGetPredecessor(node, out var predecessor) && predecessor.IsHidden;
+			unhideNodesBelowToolStripMenuItem.Enabled = count == 1 && parentNode != null && parentNode.TryGetSuccessor(node, out var successor) && successor.IsHidden;
 		}
 
 		private void addBytesToolStripMenuItem_Click(object sender, EventArgs e)
@@ -426,12 +525,12 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			memoryViewControl.AddBytes(item.Value);
+			AddBytesToClass(item.Value);
 		}
 
 		private void addXBytesToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			AskAddOrInsertBytes("Add Bytes", memoryViewControl.AddBytes);
+			AskAddOrInsertBytes("Add Bytes", AddBytesToClass);
 		}
 
 		private void insertBytesToolStripMenuItem_Click(object sender, EventArgs e)
@@ -441,25 +540,212 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			memoryViewControl.InsertBytes(item.Value);
+			InsertBytesInClass(item.Value);
 		}
 
 		private void insertXBytesToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			AskAddOrInsertBytes("Insert Bytes", memoryViewControl.InsertBytes);
+			AskAddOrInsertBytes("Insert Bytes", InsertBytesInClass);
 		}
 
-		private void memoryTypeToolStripButton_Click(object sender, EventArgs e)
+		private void createClassFromNodesToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			if (!(sender is TypeToolStripButton item))
+			var selectedNodes = memoryViewControl.GetSelectedNodes();
+
+			if (selectedNodes.Count > 0 && !(selectedNodes[0].Node is ClassNode))
+			{
+				if (selectedNodes[0].Node.GetParentContainer() is ClassNode parentNode)
+				{
+					var newClassNode = ClassNode.Create();
+					selectedNodes.Select(h => h.Node).ForEach(newClassNode.AddNode);
+
+					var classInstanceNode = new ClassInstanceNode();
+					classInstanceNode.ChangeInnerNode(newClassNode);
+
+					parentNode.InsertNode(selectedNodes[0].Node, classInstanceNode);
+
+					selectedNodes.Select(h => h.Node).ForEach(c => parentNode.RemoveNode(c));
+
+					ClearSelection();
+				}
+			}
+		}
+
+		private void dissectNodesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var hexNodes = memoryViewControl.GetSelectedNodes().Where(h => h.Node is BaseHexNode).ToList();
+			if (!hexNodes.Any())
 			{
 				return;
 			}
 
-			memoryViewControl.ReplaceSelectedNodesWithType(item.Value);
+			foreach (var g in hexNodes.GroupBy(n => n.Node.GetParentContainer()))
+			{
+				NodeDissector.DissectNodes(g.Select(h => (BaseHexNode)h.Node), Program.RemoteProcess, g.First().Memory);
+			}
+
+			ClearSelection();
 		}
 
-		#endregion
+		private void searchForEqualValuesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var selectedNode = memoryViewControl.GetSelectedNodes().FirstOrDefault();
+			if (selectedNode == null)
+			{
+				return;
+			}
+
+			var bitConverter = Program.RemoteProcess.BitConverter;
+
+			IScanComparer comparer;
+			switch (selectedNode.Node)
+			{
+				case BaseHexNode node:
+					comparer = new ArrayOfBytesMemoryComparer(node.ReadValueFromMemory(selectedNode.Memory));
+					break;
+				case FloatNode node:
+					comparer = new FloatMemoryComparer(ScanCompareType.Equal, ScanRoundMode.Normal, 2, node.ReadValueFromMemory(selectedNode.Memory), 0.0f, bitConverter);
+					break;
+				case DoubleNode node:
+					comparer = new DoubleMemoryComparer(ScanCompareType.Equal, ScanRoundMode.Normal, 2, node.ReadValueFromMemory(selectedNode.Memory), 0.0, bitConverter);
+					break;
+				case Int8Node node:
+					comparer = new ByteMemoryComparer(ScanCompareType.Equal, (byte)node.ReadValueFromMemory(selectedNode.Memory), 0);
+					break;
+				case UInt8Node node:
+					comparer = new ByteMemoryComparer(ScanCompareType.Equal, node.ReadValueFromMemory(selectedNode.Memory), 0);
+					break;
+				case Int16Node node:
+					comparer = new ShortMemoryComparer(ScanCompareType.Equal, node.ReadValueFromMemory(selectedNode.Memory), 0, bitConverter);
+					break;
+				case UInt16Node node:
+					comparer = new ShortMemoryComparer(ScanCompareType.Equal, (short)node.ReadValueFromMemory(selectedNode.Memory), 0, bitConverter);
+					break;
+				case Int32Node node:
+					comparer = new IntegerMemoryComparer(ScanCompareType.Equal, node.ReadValueFromMemory(selectedNode.Memory), 0, bitConverter);
+					break;
+				case UInt32Node node:
+					comparer = new IntegerMemoryComparer(ScanCompareType.Equal, (int)node.ReadValueFromMemory(selectedNode.Memory), 0, bitConverter);
+					break;
+				case Int64Node node:
+					comparer = new LongMemoryComparer(ScanCompareType.Equal, node.ReadValueFromMemory(selectedNode.Memory), 0L, bitConverter);
+					break;
+				case UInt64Node node:
+					comparer = new LongMemoryComparer(ScanCompareType.Equal, (long)node.ReadValueFromMemory(selectedNode.Memory), 0L, bitConverter);
+					break;
+				case NIntNode node:
+				{
+					var value = node.ReadValueFromMemory(selectedNode.Memory);
+#if RECLASSNET64
+					comparer = new LongMemoryComparer(ScanCompareType.Equal, value.ToInt64(), 0L, bitConverter);
+#else
+					comparer = new IntegerMemoryComparer(ScanCompareType.Equal, value.ToInt32(), 0, bitConverter);
+#endif
+					break;
+				}
+				case NUIntNode node:
+				{
+					var value = node.ReadValueFromMemory(selectedNode.Memory);
+#if RECLASSNET64
+					comparer = new LongMemoryComparer(ScanCompareType.Equal, (long)value.ToUInt64(), 0L, bitConverter);
+#else
+					comparer = new IntegerMemoryComparer(ScanCompareType.Equal, (int)value.ToUInt32(), 0, bitConverter);
+#endif
+					break;
+				}
+				case Utf8TextNode node:
+					comparer = new StringMemoryComparer(node.ReadValueFromMemory(selectedNode.Memory), Encoding.UTF8, true);
+					break;
+				case Utf16TextNode node:
+					comparer = new StringMemoryComparer(node.ReadValueFromMemory(selectedNode.Memory), Encoding.Unicode, true);
+					break;
+				case Utf32TextNode node:
+					comparer = new StringMemoryComparer(node.ReadValueFromMemory(selectedNode.Memory), Encoding.UTF32, true);
+					break;
+				default:
+					return;
+			}
+
+			LinkedWindowFeatures.StartMemoryScan(comparer);
+		}
+
+		private void findOutWhatAccessesThisAddressToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			FindWhatInteractsWithSelectedNode(false);
+		}
+
+		private void findOutWhatWritesToThisAddressToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			FindWhatInteractsWithSelectedNode(true);
+		}
+
+		private void copyNodeToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			CopySelectedNodesToClipboard();
+		}
+
+		private void pasteNodesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			PasteNodeFromClipboardToSelection();
+		}
+
+		private void removeToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			RemoveSelectedNodes();
+		}
+
+		private void hideNodesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			HideSelectedNodes();
+		}
+
+		private void unhideChildNodesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			UnhideChildNodes();
+		}
+
+		private void unhideNodesAboveToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			UnhideNodesAbove();
+		}
+
+		private void unhideNodesBelowToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			UnhideNodesBelow();
+		}
+
+		private void copyAddressToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var selectedNodes = memoryViewControl.GetSelectedNodes();
+			if (selectedNodes.Count > 0)
+			{
+				Clipboard.SetText(selectedNodes.First().Address.ToString("X"));
+			}
+		}
+
+		private void showCodeOfClassToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			if (memoryViewControl.GetSelectedNodes().FirstOrDefault()?.Node is ClassNode node)
+			{
+				ShowPartialCodeGeneratorForm(new[] { node });
+			}
+		}
+
+		private void shrinkClassToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var node = memoryViewControl.GetSelectedNodes().Select(s => s.Node).FirstOrDefault();
+			if (!(node is ClassNode classNode))
+			{
+				return;
+			}
+
+			foreach (var nodeToDelete in classNode.Nodes.Reverse().TakeWhile(n => n is BaseHexNode))
+			{
+				classNode.RemoveNode(nodeToDelete);
+			}
+		}
+
+#endregion
 
 		private void MainForm_DragEnter(object sender, DragEventArgs e)
 		{
@@ -472,7 +758,6 @@ namespace ReClassNET.Forms
 						case ReClassNetFile.FileExtension:
 						case ReClassQtFile.FileExtension:
 						case ReClassFile.FileExtension:
-						case ReClass2007File.FileExtension:
 							e.Effect = DragDropEffects.Copy;
 							break;
 					}
@@ -509,9 +794,28 @@ namespace ReClassNET.Forms
 
 		private void classesView_ClassSelected(object sender, ClassNode node)
 		{
-			memoryViewControl.ClassNode = node;
+			CurrentClassNode = node;
+		}
 
-			memoryViewControl.Invalidate();
+		private void memoryViewControl_KeyDown(object sender, KeyEventArgs args)
+		{
+			switch (args.KeyCode)
+			{
+				case Keys.C when args.Control:
+					CopySelectedNodesToClipboard();
+					break;
+				case Keys.V when args.Control:
+					PasteNodeFromClipboardToSelection();
+					break;
+
+				case Keys.Delete:
+					RemoveSelectedNodes();
+					break;
+
+				case Keys.F2:
+					EditSelectedNodeName();
+					break;
+			}
 		}
 
 		private void memoryViewControl_SelectionChanged(object sender, EventArgs e)
@@ -521,241 +825,228 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			var count = memoryView.SelectedNodes.Count();
-			var node = memoryView.SelectedNodes.FirstOrDefault();
+			var selectedNodes = memoryView.GetSelectedNodes();
 
-			addBytesToolStripDropDownButton.Enabled = node?.ParentNode != null || node is ClassNode;
-			insertBytesToolStripDropDownButton.Enabled = count == 1 && node?.ParentNode != null;
+			var node = selectedNodes.FirstOrDefault()?.Node;
+			var parentContainer = node?.GetParentContainer();
 
-			var enabled = count > 0 && !(node is ClassNode);
+			addBytesToolStripDropDownButton.Enabled = parentContainer != null || node is ClassNode;
+			insertBytesToolStripDropDownButton.Enabled = selectedNodes.Count == 1 && parentContainer != null;
+
+			var enabled = selectedNodes.Count > 0 && !(node is ClassNode);
 			toolStrip.Items.OfType<TypeToolStripButton>().ForEach(b => b.Enabled = enabled);
 		}
 
-		#endregion
-
-		public void AttachToProcess(string processName)
+		private void memoryViewControl_ChangeClassTypeClick(object sender, NodeClickEventArgs e)
 		{
-			var info = Program.CoreFunctions.EnumerateProcesses().FirstOrDefault(p => string.Equals(p.Name, processName, StringComparison.OrdinalIgnoreCase));
-			if (info == null)
+			var classes = CurrentProject.Classes.OrderBy(c => c.Name);
+
+			if (e.Node is FunctionNode functionNode)
 			{
-				MessageBox.Show($"Process '{processName}' could not be found.", Constants.ApplicationName, MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-				Program.Settings.LastProcess = string.Empty;
-			}
-			else
-			{
-				AttachToProcess(info);
-			}
-		}
-
-		public void AttachToProcess(ProcessInfo info)
-		{
-			Contract.Requires(info != null);
-
-			Program.RemoteProcess.Close();
-
-			Program.RemoteProcess.Open(info);
-			Program.RemoteProcess.UpdateProcessInformations();
-
-			Program.Settings.LastProcess = Program.RemoteProcess.UnderlayingProcess.Name;
-		}
-
-		/// <summary>Sets the current project.</summary>
-		/// <param name="newProject">The new project.</param>
-		public void SetProject(ReClassNetProject newProject)
-		{
-			Contract.Requires(newProject != null);
-
-			if (currentProject == newProject)
-			{
-				return;
-			}
-
-			if (currentProject != null)
-			{
-				ClassNode.ClassCreated -= currentProject.AddClass;
-			}
-
-			currentProject = newProject;
-
-			ClassUtil.Classes = currentProject.Classes;
-
-			ClassNode.ClassCreated += currentProject.AddClass;
-
-			classesView.Project = currentProject;
-			memoryViewControl.Project = currentProject;
-
-			memoryViewControl.ClassNode = currentProject.Classes.FirstOrDefault();
-		}
-
-		/// <summary>Registers the node type which will create the ToolStrip and MenuStrip entries.</summary>
-		/// <param name="type">The node type.</param>
-		/// <param name="name">The name of the node type.</param>
-		/// <param name="icon">The icon of the node type.</param>
-		internal void RegisterNodeType(Type type, string name, Image icon)
-		{
-			Contract.Requires(type != null);
-			Contract.Requires(name != null);
-			Contract.Requires(icon != null);
-
-			var item = new TypeToolStripButton
-			{
-				Image = icon,
-				ToolTipText = name,
-				Value = type
-			};
-			item.Click += memoryTypeToolStripButton_Click;
-
-			toolStrip.Items.Add(item);
-
-			memoryViewControl.RegisterNodeType(type, name, icon);
-		}
-
-		/// <summary>Deregisters the node type.</summary>
-		/// <param name="type">The node type.</param>
-		internal void DeregisterNodeType(Type type)
-		{
-			Contract.Requires(type != null);
-
-			var item = toolStrip.Items.OfType<TypeToolStripButton>().FirstOrDefault(i => i.Value == type);
-			if (item != null)
-			{
-				item.Click -= memoryTypeToolStripButton_Click;
-				toolStrip.Items.Remove(item);
-			}
-
-			memoryViewControl.DeregisterNodeType(type);
-		}
-
-		/// <summary>Shows the code form with the given <paramref name="generator"/>.</summary>
-		/// <param name="generator">The generator.</param>
-		private void ShowCodeForm(ICodeGenerator generator)
-		{
-			Contract.Requires(generator != null);
-
-			LinkedWindowFeatures.ShowCodeGeneratorForm(currentProject.Classes, generator);
-		}
-
-		/// <summary>Opens the <see cref="InputBytesForm"/> and calls <paramref name="callback"/> with the result.</summary>
-		/// <param name="title">The title of the input form.</param>
-		/// <param name="callback">The function to call afterwards.</param>
-		private void AskAddOrInsertBytes(string title, Action<int> callback)
-		{
-			Contract.Requires(title != null);
-			Contract.Requires(callback != null);
-
-			if (memoryViewControl.ClassNode == null)
-			{
-				return;
-			}
-
-			using (var ib = new InputBytesForm(memoryViewControl.ClassNode.MemorySize))
-			{
-				ib.Text = title;
-
-				if (ib.ShowDialog() == DialogResult.OK)
+				var noneClass = new ClassNode(false)
 				{
-					callback(ib.Bytes);
+					Name = "None"
+				};
+
+				using var csf = new ClassSelectionForm(classes.Prepend(noneClass));
+
+				if (csf.ShowDialog() == DialogResult.OK)
+				{
+					var selectedClassNode = csf.SelectedClass;
+					if (selectedClassNode != null)
+					{
+						if (selectedClassNode == noneClass)
+						{
+							selectedClassNode = null;
+						}
+
+						functionNode.BelongsToClass = selectedClassNode;
+					}
+				}
+			}
+			else if (e.Node is BaseWrapperNode refNode)
+			{
+				using var csf = new ClassSelectionForm(classes);
+
+				if (csf.ShowDialog() == DialogResult.OK)
+				{
+					var selectedClassNode = csf.SelectedClass;
+					if (refNode.CanChangeInnerNodeTo(selectedClassNode))
+					{
+						if (!refNode.GetRootWrapperNode().ShouldPerformCycleCheckForInnerNode() || IsCycleFree(e.Node.GetParentClass(), selectedClassNode))
+						{
+							refNode.ChangeInnerNode(selectedClassNode);
+						}
+					}
 				}
 			}
 		}
 
-		/// <summary>Shows an <see cref="OpenFileDialog"/> with all valid file extensions.</summary>
-		/// <returns>The path to the selected file or null if no file was selected.</returns>
-		public static string ShowOpenProjectFileDialog()
+		private void memoryViewControl_ChangeWrappedTypeClick(object sender, NodeClickEventArgs e)
 		{
-			using (var ofd = new OpenFileDialog())
+			if (e.Node is BaseWrapperNode wrapperNode)
 			{
-				ofd.CheckFileExists = true;
-				ofd.Filter = $"All ReClass Types |*{ReClassNetFile.FileExtension};*{ReClassFile.FileExtension};*{ReClassQtFile.FileExtension};*{ReClass2007File.FileExtension}"
-					+ $"|{ReClassNetFile.FormatName} (*{ReClassNetFile.FileExtension})|*{ReClassNetFile.FileExtension}"
-					+ $"|{ReClassFile.FormatName} (*{ReClassFile.FileExtension})|*{ReClassFile.FileExtension}"
-					+ $"|{ReClassQtFile.FormatName} (*{ReClassQtFile.FileExtension})|*{ReClassQtFile.FileExtension}"
-					+ $"|{ReClass2007File.FormatName} (*{ReClass2007File.FileExtension})|*{ReClass2007File.FileExtension}";
-
-				if (ofd.ShowDialog() == DialogResult.OK)
+				var items = NodeTypesBuilder.CreateToolStripMenuItems(t =>
 				{
-					return ofd.FileName;
+					var node = BaseNode.CreateInstanceFromType(t);
+					if (wrapperNode.CanChangeInnerNodeTo(node))
+					{
+						wrapperNode.ChangeInnerNode(node);
+					}
+				}, wrapperNode.CanChangeInnerNodeTo(null));
+
+				var menu = new ContextMenuStrip();
+				menu.Items.AddRange(items.ToArray());
+				menu.Show(this, e.Location);
+			}
+		}
+
+		private void memoryViewControl_ChangeEnumTypeClick(object sender, NodeClickEventArgs e)
+		{
+			if (e.Node is EnumNode enumNode)
+			{
+				using var csf = new EnumSelectionForm(CurrentProject);
+
+				var size = enumNode.Enum.Size;
+
+				if (csf.ShowDialog() == DialogResult.OK)
+				{
+					var @enum = csf.SelectedItem;
+					if (@enum != null)
+					{
+						enumNode.ChangeEnum(@enum);
+					}
+				}
+
+				if (size != enumNode.Enum.Size)
+				{
+					// Update the parent container because the enum size has changed.
+					enumNode.GetParentContainer()?.ChildHasChanged(enumNode);
+				}
+
+				foreach (var @enum in CurrentProject.Enums)
+				{
+					projectView.UpdateEnumNode(@enum);
 				}
 			}
-
-			return null;
 		}
 
-		/// <summary>Loads the file as a new project.</summary>
-		/// <param name="path">Full pathname of the file.</param>
-		public void LoadProjectFromPath(string path)
+		private void showCodeOfClassToolStripMenuItem2_Click(object sender, EventArgs e)
 		{
-			Contract.Requires(path != null);
-
-			var project = new ReClassNetProject();
-
-			LoadProjectFromPath(path, ref project);
-
-			// If the file is a ReClass.NET file remember the path.
-			if (Path.GetExtension(path) == ReClassNetFile.FileExtension)
-			{
-				project.Path = path;
-			}
-
-			SetProject(project);
-		}
-
-		/// <summary>Loads the file into the given project.</summary>
-		/// <param name="path">Full pathname of the file.</param>
-		/// <param name="project">[in,out] The project.</param>
-		private static void LoadProjectFromPath(string path, ref ReClassNetProject project)
-		{
-			Contract.Requires(path != null);
-			Contract.Requires(project != null);
-			Contract.Ensures(Contract.ValueAtReturn(out project) != null);
-
-			IReClassImport import;
-			switch (Path.GetExtension(path)?.ToLower())
-			{
-				case ReClassNetFile.FileExtension:
-					import = new ReClassNetFile(project);
-					break;
-				case ReClassQtFile.FileExtension:
-					import = new ReClassQtFile(project);
-					break;
-				case ReClassFile.FileExtension:
-					import = new ReClassFile(project);
-					break;
-				case ReClass2007File.FileExtension:
-					import = new ReClass2007File(project);
-					break;
-				default:
-					Program.Logger.Log(LogLevel.Error, $"The file '{path}' has an unknown type.");
-					return;
-			}
-			import.Load(path, Program.Logger);
-		}
-
-		/// <summary>Loads all symbols for the current process and displays the progress status.</summary>
-		private void LoadAllSymbolsForCurrentProcess()
-		{
-			if (loadSymbolsTask != null && !loadSymbolsTask.IsCompleted)
+			var classNode = projectView.SelectedClass;
+			if (classNode == null)
 			{
 				return;
 			}
 
-			infoToolStripStatusLabel.Visible = true;
+			ShowPartialCodeGeneratorForm(new[] { classNode });
+		}
 
-			int index = 0;
+		private void enableHierarchyViewToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var isChecked = !enableHierarchyViewToolStripMenuItem.Checked;
 
-			var progress = new Progress<Tuple<Module, IEnumerable<Module>>>(
-				report =>
+			enableHierarchyViewToolStripMenuItem.Checked = isChecked;
+
+			expandAllClassesToolStripMenuItem.Enabled = collapseAllClassesToolStripMenuItem.Enabled = isChecked;
+
+			projectView.EnableClassHierarchyView = isChecked;
+		}
+
+		private void autoExpandHierarchyViewToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var isChecked = !autoExpandHierarchyViewToolStripMenuItem.Checked;
+
+			autoExpandHierarchyViewToolStripMenuItem.Checked = isChecked;
+
+			projectView.AutoExpandClassNodes = isChecked;
+		}
+
+		private void expandAllClassesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			projectView.ExpandAllClassNodes();
+		}
+
+		private void collapseAllClassesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			projectView.CollapseAllClassNodes();
+		}
+
+		private void removeUnusedClassesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			CurrentProject.RemoveUnusedClasses();
+		}
+
+		private void deleteClassToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var classNode = projectView.SelectedClass;
+			if (classNode == null)
+			{
+				return;
+			}
+
+			try
+			{
+				CurrentProject.Remove(classNode);
+			}
+			catch (ClassReferencedException ex)
+			{
+				Program.Logger.Log(ex);
+			}
+		}
+
+		private void editEnumsToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			using var elf = new EnumListForm(currentProject);
+
+			elf.ShowDialog();
+		}
+
+		private void editEnumToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			var @enum = projectView.SelectedEnum;
+			if (@enum != null)
+			{
+				using var eef = new EnumEditorForm(@enum);
+
+				eef.ShowDialog();
+			}
+		}
+
+		private void showEnumsToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			using var elf = new EnumListForm(currentProject);
+
+			elf.ShowDialog();
+		}
+
+		private void memoryViewControl_DrawContextRequested(object sender, DrawContextRequestEventArgs args)
+		{
+			var process = Program.RemoteProcess;
+
+			var classNode = CurrentClassNode;
+			if (classNode != null)
+			{
+				memoryViewBuffer.Size = classNode.MemorySize;
+
+				IntPtr address;
+				try
 				{
-					infoToolStripStatusLabel.Text = $"[{++index}/{report.Item2.Count()}] Loading symbols for module: {report.Item1.Name}";
+					address = process.ParseAddress(classNode.AddressFormula);
 				}
-			);
+				catch (ParseException)
+				{
+					address = IntPtr.Zero;
+				}
+				memoryViewBuffer.UpdateFrom(process, address);
 
-			loadSymbolsTaskToken = new CancellationTokenSource();
-
-			loadSymbolsTask = Program.RemoteProcess
-				.LoadAllSymbolsAsync(progress, loadSymbolsTaskToken.Token)
-				.ContinueWith(_ => infoToolStripStatusLabel.Visible = false, TaskScheduler.FromCurrentSynchronizationContext());
+				args.Settings = Program.Settings;
+				args.IconProvider = iconProvider;
+				args.Process = process;
+				args.Memory = memoryViewBuffer;
+				args.Node = classNode;
+				args.BaseAddress = address;
+			}
 		}
 	}
 }

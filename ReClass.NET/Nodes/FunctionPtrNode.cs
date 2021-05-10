@@ -1,18 +1,19 @@
-﻿using System.Drawing;
-using ReClassNET.UI;
+using System.Drawing;
+using ReClassNET.Controls;
 
 namespace ReClassNET.Nodes
 {
 	public class FunctionPtrNode : BaseFunctionPtrNode
 	{
-		/// <summary>Draws this node.</summary>
-		/// <param name="view">The view information.</param>
-		/// <param name="x">The x coordinate.</param>
-		/// <param name="y">The y coordinate.</param>
-		/// <returns>The pixel size the node occupies.</returns>
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			return Draw(view, x, y, "FunctionPtr", Name);
+			name = "Function Pointer";
+			icon = Properties.Resources.B16x16_Button_Function_Pointer;
+		}
+
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			return Draw(context, x, y, "FunctionPtr", Name);
 		}
 	}
 }

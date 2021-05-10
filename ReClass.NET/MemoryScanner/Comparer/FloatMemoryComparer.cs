@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using ReClassNET.Extensions;
-using ReClassNET.Util;
+using ReClassNET.Util.Conversion;
 
 namespace ReClassNET.MemoryScanner.Comparer
 {
-	public class FloatMemoryComparer : IScanComparer
+	public class FloatMemoryComparer : ISimpleScanComparer
 	{
 		public ScanCompareType CompareType { get; }
 		public ScanRoundMode RoundType { get; }
@@ -17,17 +17,11 @@ namespace ReClassNET.MemoryScanner.Comparer
 		private readonly float minValue;
 		private readonly float maxValue;
 
-		public FloatMemoryComparer(ScanCompareType compareType, ScanRoundMode roundType, int significantDigits, float value1, float value2)
+		private readonly EndianBitConverter bitConverter;
+
+		public FloatMemoryComparer(ScanCompareType compareType, ScanRoundMode roundType, int significantDigits, float value1, float value2, EndianBitConverter bitConverter)
 		{
 			CompareType = compareType;
-
-			if (compareType == ScanCompareType.Between || compareType == ScanCompareType.BetweenOrEqual)
-			{
-				if (value1 > value2)
-				{
-					Utils.Swap(ref value1, ref value2);
-				}
-			}
 
 			RoundType = roundType;
 			this.significantDigits = Math.Max(significantDigits, 1);
@@ -38,64 +32,39 @@ namespace ReClassNET.MemoryScanner.Comparer
 
 			minValue = value1 - 1.0f / factor;
 			maxValue = value1 + 1.0f / factor;
+
+			this.bitConverter = bitConverter;
 		}
 
-		private bool CheckRoundedEquality(float value)
-		{
-			switch (RoundType)
+		private bool CheckRoundedEquality(float value) =>
+			RoundType switch
 			{
-				case ScanRoundMode.Strict:
-					return Value1.IsNearlyEqual((float)Math.Round(value, significantDigits, MidpointRounding.AwayFromZero));
-				case ScanRoundMode.Normal:
-					return minValue < value && value < maxValue;
-				case ScanRoundMode.Truncate:
-					return (int)value == (int)Value1;
-				default:
-					throw new ArgumentOutOfRangeException();
-			}
-		}
+				ScanRoundMode.Strict => Value1.IsNearlyEqual((float)Math.Round(value, significantDigits, MidpointRounding.AwayFromZero), 0.0001f),
+				ScanRoundMode.Normal => minValue < value && value < maxValue,
+				ScanRoundMode.Truncate => (int)value == (int)Value1,
+				_ => throw new ArgumentOutOfRangeException()
+			};
 
 		public bool Compare(byte[] data, int index, out ScanResult result)
 		{
-			result = null;
-
-			var value = BitConverter.ToSingle(data, index);
-
-			bool IsMatch()
-			{
-				switch (CompareType)
+			return CompareInternal(
+				data,
+				index,
+				value => CompareType switch
 				{
-					case ScanCompareType.Equal:
-						return CheckRoundedEquality(value);
-					case ScanCompareType.NotEqual:
-						return !CheckRoundedEquality(value);
-					case ScanCompareType.GreaterThan:
-						return value > Value1;
-					case ScanCompareType.GreaterThanOrEqual:
-						return value >= Value1;
-					case ScanCompareType.LessThan:
-						return value < Value1;
-					case ScanCompareType.LessThanOrEqual:
-						return value <= Value1;
-					case ScanCompareType.Between:
-						return Value1 < value && value < Value2;
-					case ScanCompareType.BetweenOrEqual:
-						return Value1 <= value && value <= Value2;
-					case ScanCompareType.Unknown:
-						return true;
-					default:
-						throw new InvalidCompareTypeException(CompareType);
-				}
-			}
-
-			if (!IsMatch())
-			{
-				return false;
-			}
-
-			result = new FloatScanResult(value);
-
-			return true;
+					ScanCompareType.Equal => CheckRoundedEquality(value),
+					ScanCompareType.NotEqual => !CheckRoundedEquality(value),
+					ScanCompareType.GreaterThan => value > Value1,
+					ScanCompareType.GreaterThanOrEqual => value >= Value1,
+					ScanCompareType.LessThan => value < Value1,
+					ScanCompareType.LessThanOrEqual => value <= Value1,
+					ScanCompareType.Between => Value1 < value && value < Value2,
+					ScanCompareType.BetweenOrEqual => Value1 <= value && value <= Value2,
+					ScanCompareType.Unknown => true,
+					_ => throw new InvalidCompareTypeException(CompareType)
+				},
+				out result
+			);
 		}
 
 		public bool Compare(byte[] data, int index, ScanResult previous, out ScanResult result)
@@ -109,48 +78,38 @@ namespace ReClassNET.MemoryScanner.Comparer
 
 		public bool Compare(byte[] data, int index, FloatScanResult previous, out ScanResult result)
 		{
+			return CompareInternal(
+				data,
+				index,
+				value => CompareType switch
+				{
+					ScanCompareType.Equal => CheckRoundedEquality(value),
+					ScanCompareType.NotEqual => !CheckRoundedEquality(value),
+					ScanCompareType.Changed => value != previous.Value,
+					ScanCompareType.NotChanged => value == previous.Value,
+					ScanCompareType.GreaterThan => value > Value1,
+					ScanCompareType.GreaterThanOrEqual => value >= Value1,
+					ScanCompareType.Increased => value > previous.Value,
+					ScanCompareType.IncreasedOrEqual => value >= previous.Value,
+					ScanCompareType.LessThan => value < Value1,
+					ScanCompareType.LessThanOrEqual => value <= Value1,
+					ScanCompareType.Decreased => value < previous.Value,
+					ScanCompareType.DecreasedOrEqual => value <= previous.Value,
+					ScanCompareType.Between => Value1 < value && value < Value2,
+					ScanCompareType.BetweenOrEqual => Value1 <= value && value <= Value2,
+					_ => throw new InvalidCompareTypeException(CompareType)
+				},
+				out result
+			);
+		}
+
+		private bool CompareInternal(byte[] data, int index, Func<float, bool> matcher, out ScanResult result)
+		{
 			result = null;
 
-			var value = BitConverter.ToSingle(data, index);
+			var value = bitConverter.ToSingle(data, index);
 
-			bool IsMatch()
-			{
-				switch (CompareType)
-				{
-					case ScanCompareType.Equal:
-						return CheckRoundedEquality(value);
-					case ScanCompareType.NotEqual:
-						return !CheckRoundedEquality(value);
-					case ScanCompareType.Changed:
-						return value != previous.Value;
-					case ScanCompareType.NotChanged:
-						return value == previous.Value;
-					case ScanCompareType.GreaterThan:
-						return value > Value1;
-					case ScanCompareType.GreaterThanOrEqual:
-						return value >= Value1;
-					case ScanCompareType.Increased:
-						return value > previous.Value;
-					case ScanCompareType.IncreasedOrEqual:
-						return value >= previous.Value;
-					case ScanCompareType.LessThan:
-						return value < Value1;
-					case ScanCompareType.LessThanOrEqual:
-						return value <= Value1;
-					case ScanCompareType.Decreased:
-						return value < previous.Value;
-					case ScanCompareType.DecreasedOrEqual:
-						return value <= previous.Value;
-					case ScanCompareType.Between:
-						return Value1 < value && value < Value2;
-					case ScanCompareType.BetweenOrEqual:
-						return Value1 <= value && value <= Value2;
-					default:
-						throw new InvalidCompareTypeException(CompareType);
-				}
-			}
-
-			if (!IsMatch())
+			if (!matcher(value))
 			{
 				return false;
 			}

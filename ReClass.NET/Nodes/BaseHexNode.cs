@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Globalization;
+using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
@@ -12,8 +13,13 @@ namespace ReClassNET.Nodes
 {
 	public abstract class BaseHexNode : BaseNode
 	{
-		public static DateTime CurrentHighlightTime;
-		public static readonly TimeSpan HightlightDuration = TimeSpan.FromSeconds(1);
+		private static readonly Random highlightRandom = new Random();
+		private static readonly Color[] highlightColors = {
+			Color.Aqua, Color.Aquamarine, Color.Blue, Color.BlueViolet, Color.Chartreuse, Color.Crimson, Color.LawnGreen, Color.Magenta
+		};
+		private static Color GetRandomHighlightColor() => highlightColors[highlightRandom.Next(highlightColors.Length)];
+
+		private static readonly TimeSpan hightlightDuration = TimeSpan.FromSeconds(1);
 
 		private static readonly Dictionary<IntPtr, ValueTypeWrapper<DateTime>> highlightTimer = new Dictionary<IntPtr, ValueTypeWrapper<DateTime>>();
 
@@ -26,74 +32,75 @@ namespace ReClassNET.Nodes
 			buffer = new byte[MemorySize];
 		}
 
-		protected Size Draw(ViewInfo view, int x, int y, string text, int length)
+		protected Size Draw(DrawContext context, int x, int y, string text, int length)
 		{
-			Contract.Requires(view != null);
+			Contract.Requires(context != null);
 
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
-
-			DrawInvalidMemoryIndicator(view, y);
 
 			var origX = x;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding + 16;
-			x = AddAddressOffset(view, x, y);
+			x = AddIconPadding(context, x);
+			x = AddIconPadding(context, x);
+
+			x = AddAddressOffset(context, x, y);
 
 			if (!string.IsNullOrEmpty(text))
 			{
-				x = AddText(view, x, y, view.Settings.TextColor, HotSpot.NoneId, text);
+				x = AddText(context, x, y, context.Settings.TextColor, HotSpot.NoneId, text);
 			}
 
-			view.Memory.ReadBytes(Offset, buffer);
+			context.Memory.ReadBytes(Offset, buffer);
 
-			var color = view.Settings.HexColor;
-			if (view.Settings.HighlightChangedValues)
+			var color = context.Settings.HexColor;
+			if (context.Settings.HighlightChangedValues)
 			{
-				var address = view.Address.Add(Offset);
+				var address = context.Address + Offset;
 
-				highlightTimer.RemoveWhere(kv => kv.Value.Value < CurrentHighlightTime);
+				highlightTimer.RemoveWhere(kv => kv.Value.Value < context.CurrentTime);
 
 				if (highlightTimer.TryGetValue(address, out var until))
 				{
-					if (until.Value >= CurrentHighlightTime)
+					if (until.Value >= context.CurrentTime)
 					{
-						color = view.Settings.HighlightColor;
+						color = GetRandomHighlightColor();
 
-						if (view.Memory.HasChanged(Offset, MemorySize))
+						if (context.Memory.HasChanged(Offset, MemorySize))
 						{
-							until.Value = CurrentHighlightTime.Add(HightlightDuration);
+							until.Value = context.CurrentTime.Add(hightlightDuration);
 						}
 					}
 				}
-				else if (view.Memory.HasChanged(Offset, MemorySize))
+				else if (context.Memory.HasChanged(Offset, MemorySize))
 				{
-					highlightTimer.Add(address, CurrentHighlightTime.Add(HightlightDuration));
+					highlightTimer.Add(address, context.CurrentTime.Add(hightlightDuration));
 
-					color = view.Settings.HighlightColor;
+					color = GetRandomHighlightColor();
 				}
 			}
 
 			for (var i = 0; i < length; ++i)
 			{
-				x = AddText(view, x, y, color, i, $"{buffer[i]:X02}") + view.Font.Width;
+				x = AddText(context, x, y, color, i, $"{buffer[i]:X02}") + context.Font.Width;
 			}
 
-			x = AddComment(view, x, y);
+			x = AddComment(context, x, y);
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
 
-			return new Size(x - origX, view.Font.Height);
+			return new Size(x - origX, context.Font.Height);
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			return IsHidden ? HiddenHeight : view.Font.Height;
+			return IsHidden && !IsWrapped ? HiddenHeight : context.Font.Height;
 		}
 
 		/// <summary>Updates the node from the given spot. Sets the value of the selected byte.</summary>
@@ -109,7 +116,7 @@ namespace ReClassNET.Nodes
 			{
 				if (byte.TryParse(spot.Text, NumberStyles.HexNumber, null, out var val))
 				{
-					spot.Memory.Process.WriteRemoteMemory(spot.Address + spot.Id, val);
+					spot.Process.WriteRemoteMemory(spot.Address + spot.Id, val);
 				}
 			}
 		}

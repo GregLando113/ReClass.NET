@@ -1,9 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Windows.Forms;
-using ReClassNET.CodeGenerator;
 using ReClassNET.Debugger;
 using ReClassNET.Forms;
 using ReClassNET.MemoryScanner;
@@ -18,13 +16,13 @@ namespace ReClassNET.UI
 		{
 			Contract.Ensures(Contract.Result<ClassNode>() != null);
 
-			var classView = Program.MainForm.ClassView;
+			var classView = Program.MainForm.ProjectView;
 
 			var node = ClassNode.Create();
-			node.Address = address;
+			node.AddressFormula = address.ToString("X");
 			if (addDefaultBytes)
 			{
-				node.AddBytes(64);
+				node.AddBytes(16 * IntPtr.Size);
 			}
 
 			classView.SelectedClass = node;
@@ -49,13 +47,13 @@ namespace ReClassNET.UI
 
 		public static void SetCurrentClassAddress(IntPtr address)
 		{
-			var classNode = Program.MainForm.ClassView.SelectedClass;
+			var classNode = Program.MainForm.ProjectView.SelectedClass;
 			if (classNode == null)
 			{
 				return;
 			}
 
-			classNode.Address = address;
+			classNode.AddressFormula = address.ToString("X");
 		}
 
 		public static void FindWhatInteractsWithAddress(IntPtr address, int size, bool writeOnly)
@@ -91,7 +89,7 @@ namespace ReClassNET.UI
 			}
 			if (sf == null)
 			{
-				sf = new ScannerForm();
+				sf = new ScannerForm(Program.RemoteProcess);
 				sf.Show();
 			}
 
@@ -130,21 +128,6 @@ namespace ReClassNET.UI
 			}
 
 			sf.ExcuteScan(settings, comparer);
-		}
-
-		public static void ShowCodeGeneratorForm(IEnumerable<ClassNode> classes)
-		{
-			Contract.Requires(classes != null);
-
-			ShowCodeGeneratorForm(classes, new CppCodeGenerator());
-		}
-
-		public static void ShowCodeGeneratorForm(IEnumerable<ClassNode> classes, ICodeGenerator generator)
-		{
-			Contract.Requires(classes != null);
-			Contract.Requires(generator != null);
-
-			new CodeForm(generator, classes, Program.Logger).Show();
 		}
 	}
 }

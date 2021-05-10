@@ -1,10 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Text;
-using ReClassNET.Extensions;
 
 namespace ReClassNET.Util.Rtf
 {
@@ -27,8 +25,6 @@ namespace ReClassNET.Util.Rtf
 		private int fontIndex;
 		private float fontSize;
 		private FontStyle fontStyle;
-
-		protected bool isLocked;
 
 		public RtfBuilder()
 			: this(RtfFont.Calibri, 22.0f)
@@ -60,30 +56,46 @@ namespace ReClassNET.Util.Rtf
 
 		public RtfBuilder Append(string value)
 		{
-			AppendInternal(value);
+			if (!string.IsNullOrEmpty(value))
+			{
+				using (new RtfFormatWrapper(this))
+				{
+					value = EscapeString(value);
+					if (value.IndexOf(Environment.NewLine, StringComparison.Ordinal) >= 0)
+					{
+						var lines = value.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+
+						buffer.Append(string.Join(@"\line ", lines));
+					}
+					else
+					{
+						buffer.Append(value);
+					}
+				}
+			}
 
 			return this;
 		}
 
 		public RtfBuilder AppendLevel(int level)
 		{
-			AppendLevelInternal(level);
+			buffer.AppendFormat(@"\level{0} ", level);
 
 			return this;
 		}
 
 		public RtfBuilder AppendLine()
 		{
-			AppendLineInternal();
+			buffer.AppendLine(@"\line");
 
 			return this;
 		}
 
 		public RtfBuilder AppendLine(string value)
 		{
-			AppendLineInternal(value);
+			Append(value);
 
-			return this;
+			return AppendLine();
 		}
 
 		public RtfBuilder AppendParagraph()
@@ -95,12 +107,11 @@ namespace ReClassNET.Util.Rtf
 
 		public RtfBuilder AppendPage()
 		{
-			AppendPageInternal();
+			buffer.AppendLine(@"\page");
 
 			return this;
 		}
 
-		[DebuggerStepThrough]
 		public RtfBuilder SetForeColor(Color color)
 		{
 			foreColor = color;
@@ -108,7 +119,6 @@ namespace ReClassNET.Util.Rtf
 			return this;
 		}
 
-		[DebuggerStepThrough]
 		public RtfBuilder SetBackColor(Color color)
 		{
 			backColor = color;
@@ -116,7 +126,6 @@ namespace ReClassNET.Util.Rtf
 			return this;
 		}
 
-		[DebuggerStepThrough]
 		public RtfBuilder SetFont(RtfFont font)
 		{
 			fontIndex = IndexOfFont(font);
@@ -124,7 +133,6 @@ namespace ReClassNET.Util.Rtf
 			return this;
 		}
 
-		[DebuggerStepThrough]
 		public RtfBuilder SetFontSize(float size)
 		{
 			fontSize = size;
@@ -132,10 +140,9 @@ namespace ReClassNET.Util.Rtf
 			return this;
 		}
 
-		[DebuggerStepThrough]
-		public RtfBuilder SetFontStyle(FontStyle fontStyle)
+		public RtfBuilder SetFontStyle(FontStyle style)
 		{
-			this.fontStyle = fontStyle;
+			fontStyle = style;
 
 			return this;
 		}
@@ -198,62 +205,9 @@ namespace ReClassNET.Util.Rtf
 
 		public RtfBuilder Reset()
 		{
-			ResetInternal();
+			buffer.AppendLine(@"\pard");
 
 			return this;
-		}
-
-		protected void AppendInternal(string value)
-		{
-			if (!string.IsNullOrEmpty(value))
-			{
-				using (new RtfFormatWrapper(this))
-				{
-					value = EscapeString(value);
-					if (value.IndexOf(Environment.NewLine, StringComparison.Ordinal) >= 0)
-					{
-						var lines = value.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
-
-						buffer.Append(string.Join(@"\line ", lines));
-					}
-					else
-					{
-						buffer.Append(value);
-					}
-				}
-			}
-		}
-
-		protected void AppendLevelInternal(int level)
-		{
-			buffer.AppendFormat(@"\level{0} ", level);
-		}
-
-		protected void AppendLineInternal(string value)
-		{
-			Append(value);
-
-			buffer.AppendLine(@"\line");
-		}
-
-		protected void AppendLineInternal()
-		{
-			buffer.AppendLine(@"\line");
-		}
-
-		protected void AppendPageInternal()
-		{
-			buffer.AppendLine(@"\page");
-		}
-
-		public IDisposable FormatLock()
-		{
-			return new RtfFormatLock(this);
-		}
-
-		protected void ResetInternal()
-		{
-			buffer.AppendLine(@"\pard");
 		}
 
 		public override string ToString()
@@ -263,11 +217,17 @@ namespace ReClassNET.Util.Rtf
 			sb.Append(@"{\rtf1\ansi\ansicpg1252\deff0\deflang3081");
 
 			sb.Append(@"{\fonttbl");
-			sb.Append(usedFonts.Select((f, i) => string.Format(f, i)).Join());
+			for (var i = 0; i < usedFonts.Count; ++i)
+			{
+				sb.AppendFormat(usedFonts[i], i);
+			}
 			sb.AppendLine("}");
 
 			sb.Append(@"{\colortbl ;");
-			sb.Append(usedColors.Select(c => $@"\red{c.R}\green{c.G}\blue{c.B};").Join());
+			foreach (var color in usedColors)
+			{
+				sb.Append($@"\red{color.R}\green{color.G}\blue{color.B};");
+			}
 			sb.AppendLine("}");
 
 			sb.Append(@"\viewkind4\uc1\pard\plain\f0");

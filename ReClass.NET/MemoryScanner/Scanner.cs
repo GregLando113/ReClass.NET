@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.IO;
@@ -82,9 +82,9 @@ namespace ReClassNET.MemoryScanner
 			return CurrentStore.GetResultBlocks().SelectMany(rb => rb.Results.Select(r =>
 			{
 				// Convert the block offset to a real address.
-				var c = r.Clone();
-				c.Address = c.Address.Add(rb.Start);
-				return c;
+				var scanResult = r.Clone();
+				scanResult.Address = scanResult.Address.Add(rb.Start);
+				return scanResult;
 			}));
 		}
 
@@ -122,48 +122,45 @@ namespace ReClassNET.MemoryScanner
 
 			return process.Sections
 				.Where(s => !s.Protection.HasFlag(SectionProtection.Guard))
-				.Where(s => s.Start.InRange(Settings.StartAddress, Settings.StopAddress)
-							|| Settings.StartAddress.InRange(s.Start, s.End)
-							|| Settings.StopAddress.InRange(s.Start, s.End))
-				.Where(s =>
+				.Where(s => s.Start.IsInRange(Settings.StartAddress, Settings.StopAddress)
+							|| Settings.StartAddress.IsInRange(s.Start, s.End)
+							|| Settings.StopAddress.IsInRange(s.Start, s.End))
+				.Where(s => s.Type switch
 				{
-					switch (s.Type)
-					{
-						case SectionType.Private: return Settings.ScanPrivateMemory;
-						case SectionType.Image: return Settings.ScanImageMemory;
-						case SectionType.Mapped: return Settings.ScanMappedMemory;
-						default: return false;
-					}
+					SectionType.Private => Settings.ScanPrivateMemory,
+					SectionType.Image => Settings.ScanImageMemory,
+					SectionType.Mapped => Settings.ScanMappedMemory,
+					_ => false
 				})
 				.Where(s =>
 				{
 					var isWritable = s.Protection.HasFlag(SectionProtection.Write);
-					switch (Settings.ScanWritableMemory)
+					return Settings.ScanWritableMemory switch
 					{
-						case SettingState.Yes: return isWritable;
-						case SettingState.No: return !isWritable;
-						default: return true;
-					}
+						SettingState.Yes => isWritable,
+						SettingState.No => !isWritable,
+						_ => true
+					};
 				})
 				.Where(s =>
 				{
 					var isExecutable = s.Protection.HasFlag(SectionProtection.Execute);
-					switch (Settings.ScanExecutableMemory)
+					return Settings.ScanExecutableMemory switch
 					{
-						case SettingState.Yes: return isExecutable;
-						case SettingState.No: return !isExecutable;
-						default: return true;
-					}
+						SettingState.Yes => isExecutable,
+						SettingState.No => !isExecutable,
+						_ => true
+					};
 				})
 				.Where(s =>
 				{
 					var isCopyOnWrite = s.Protection.HasFlag(SectionProtection.CopyOnWrite);
-					switch (Settings.ScanCopyOnWriteMemory)
+					return Settings.ScanCopyOnWriteMemory switch
 					{
-						case SettingState.Yes: return isCopyOnWrite;
-						case SettingState.No: return !isCopyOnWrite;
-						default: return true;
-					}
+						SettingState.Yes => isCopyOnWrite,
+						SettingState.No => !isCopyOnWrite,
+						_ => true
+					};
 				})
 				.ToList();
 		}
@@ -219,7 +216,7 @@ namespace ReClassNET.MemoryScanner
 
 				var result = Parallel.ForEach(
 					regions, // Sections get grouped by the framework to balance the workers.
-					() => new ScannerContext(Settings, comparer, initialBufferSize), // Create a new context for every worker (thread).
+					() => new ScannerContext(CreateWorker(Settings, comparer), initialBufferSize), // Create a new context for every worker (thread).
 					(s, state, _, context) =>
 					{
 						if (!ct.IsCancellationRequested)
@@ -228,14 +225,14 @@ namespace ReClassNET.MemoryScanner
 							var end = s.Address + s.Size;
 							var size = s.Size;
 
-							if (Settings.StartAddress.InRange(start, end))
+							if (Settings.StartAddress.IsInRange(start, end))
 							{
-								size = size - Settings.StartAddress.Sub(start).ToInt32();
+								size -= Settings.StartAddress.Sub(start).ToInt32();
 								start = Settings.StartAddress;
 							}
-							if (Settings.StopAddress.InRange(start, end))
+							if (Settings.StopAddress.IsInRange(start, end))
 							{
-								size = size - end.Sub(Settings.StopAddress).ToInt32();
+								size -= end.Sub(Settings.StopAddress).ToInt32();
 							}
 
 							context.EnsureBufferSize(size);
@@ -247,7 +244,7 @@ namespace ReClassNET.MemoryScanner
 									.ToList();
 								if (results.Count > 0)
 								{
-									var block = CreateResultBlock(results, start, comparer.ValueSize);
+									var block = CreateResultBlock(results, start);
 									store.AddBlock(block); // Store the result block.
 								}
 							}
@@ -298,7 +295,7 @@ namespace ReClassNET.MemoryScanner
 			{
 				var result = Parallel.ForEach(
 					CurrentStore.GetResultBlocks(),
-					() => new ScannerContext(Settings, comparer, 0),
+					() => new ScannerContext(CreateWorker(Settings, comparer), 0),
 					(b, state, _, context) =>
 					{
 						if (!ct.IsCancellationRequested)
@@ -312,7 +309,7 @@ namespace ReClassNET.MemoryScanner
 									.ToList();
 								if (results.Count > 0)
 								{
-									var block = CreateResultBlock(results, b.Start, comparer.ValueSize);
+									var block = CreateResultBlock(results, b.Start);
 									store.AddBlock(block);
 								}
 							}
@@ -378,16 +375,18 @@ namespace ReClassNET.MemoryScanner
 		/// </summary>
 		/// <param name="results">The results in this block.</param>
 		/// <param name="previousStartAddress">The start address of the previous block or section.</param>
-		/// <param name="valueSize">The size of the value type.</param>
 		/// <returns>The new result block.</returns>
-		private static ScanResultBlock CreateResultBlock(IReadOnlyList<ScanResult> results, IntPtr previousStartAddress, int valueSize)
+		private static ScanResultBlock CreateResultBlock(IReadOnlyList<ScanResult> results, IntPtr previousStartAddress)
 		{
+			var firstResult = results.First();
+			var lastResult = results.Last();
+
 			// Calculate start and end address
-			var startAddress = results.First().Address.Add(previousStartAddress);
-			var endAddress = results.Last().Address.Add(previousStartAddress) + valueSize;
+			var startAddress = firstResult.Address.Add(previousStartAddress);
+			var endAddress = lastResult.Address.Add(previousStartAddress) + lastResult.ValueSize;
 
 			// Adjust the offsets of the results
-			var firstOffset = results.First().Address;
+			var firstOffset = firstResult.Address;
 			foreach (var result in results)
 			{
 				result.Address = result.Address.Sub(firstOffset);
@@ -399,6 +398,20 @@ namespace ReClassNET.MemoryScanner
 				results
 			);
 			return block;
+		}
+
+		private static IScannerWorker CreateWorker(ScanSettings settings, IScanComparer comparer)
+		{
+			if (comparer is ISimpleScanComparer simpleScanComparer)
+			{
+				return new SimpleScannerWorker(settings, simpleScanComparer);
+			}
+			if (comparer is IComplexScanComparer complexScanComparer)
+			{
+				return new ComplexScannerWorker(settings, complexScanComparer);
+			}
+
+			throw new Exception();
 		}
 	}
 }

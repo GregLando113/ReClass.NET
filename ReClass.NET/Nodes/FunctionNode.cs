@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Linq;
+using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
-using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
@@ -16,70 +16,77 @@ namespace ReClassNET.Nodes
 		public ClassNode BelongsToClass { get; set; }
 
 		private int memorySize = IntPtr.Size;
-		/// <summary>Size of the node in bytes.</summary>
 		public override int MemorySize => memorySize;
 
-		public override string GetToolTipText(HotSpot spot, MemoryBuffer memory)
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
 		{
-			DisassembleRemoteCode(memory, spot.Address);
-
-			return string.Join("\n", instructions.Select(i => i.Instruction));
+			name = "Function";
+			icon = Properties.Resources.B16x16_Button_Function;
 		}
 
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override string GetToolTipText(HotSpot spot)
 		{
-			Contract.Requires(view != null);
+			DisassembleRemoteCode(spot.Process, spot.Address);
 
-			if (IsHidden)
+			return string.Join("\n", Instructions.Select(i => i.Instruction));
+		}
+
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			Contract.Requires(context != null);
+
+			if (IsHidden && !IsWrapped)
 			{
-				return DrawHidden(view, x, y);
+				return DrawHidden(context, x, y);
 			}
-
-			DrawInvalidMemoryIndicator(view, y);
 
 			var origX = x;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding;
+			x = AddIconPadding(context, x);
 
-			x = AddIcon(view, x, y, Icons.Function, -1, HotSpotType.None);
+			x = AddIcon(context, x, y, context.IconProvider.Function, HotSpot.NoneId, HotSpotType.None);
 
 			var tx = x;
 
-			x = AddAddressOffset(view, x, y);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, "Function") + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name) + view.Font.Width;
-
-			x = AddOpenClose(view, x, y) + view.Font.Width;
-
-			x = AddComment(view, x, y);
-
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
-
-			var size = new Size(x - origX, view.Font.Height);
-
-			var ptr = view.Address.Add(Offset);
-			DisassembleRemoteCode(view.Memory, ptr);
-
-			if (levelsOpen[view.Level])
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, "Function") + context.Font.Width;
+			if (!IsWrapped)
 			{
-				y += view.Font.Height;
-				x = AddText(view, tx, y, view.Settings.TypeColor, HotSpot.NoneId, "Signature:") + view.Font.Width;
-				x = AddText(view, x, y, view.Settings.ValueColor, 0, Signature);
-				size.Width = Math.Max(size.Width, x - origX);
-				size.Height += view.Font.Height;
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name) + context.Font.Width;
+			}
 
-				y += view.Font.Height;
-				x = AddText(view, tx, y, view.Settings.TextColor, HotSpot.NoneId, "Belongs to: ");
-				x = AddText(view, x, y, view.Settings.ValueColor, HotSpot.NoneId, BelongsToClass == null ? "<None>" : $"<{BelongsToClass.Name}>") + view.Font.Width;
-				x = AddIcon(view, x, y, Icons.Change, 1, HotSpotType.ChangeType);
-				size.Width = Math.Max(size.Width, x - origX);
-				size.Height += view.Font.Height;
+			x = AddOpenCloseIcon(context, x, y) + context.Font.Width;
 
-				var instructionSize = DrawInstructions(view, tx, y + 4);
+			x = AddComment(context, x, y);
+
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
+
+			var size = new Size(x - origX, context.Font.Height);
+
+			var ptr = context.Address + Offset;
+			DisassembleRemoteCode(context.Process, ptr);
+
+			if (LevelsOpen[context.Level])
+			{
+				y += context.Font.Height;
+				x = AddText(context, tx, y, context.Settings.TypeColor, HotSpot.NoneId, "Signature:") + context.Font.Width;
+				x = AddText(context, x, y, context.Settings.ValueColor, 0, Signature);
+				size.Width = Math.Max(size.Width, x - origX);
+				size.Height += context.Font.Height;
+
+				y += context.Font.Height;
+				x = AddText(context, tx, y, context.Settings.TextColor, HotSpot.NoneId, "Belongs to: ");
+				x = AddText(context, x, y, context.Settings.ValueColor, HotSpot.NoneId, BelongsToClass == null ? "<None>" : $"<{BelongsToClass.Name}>") + context.Font.Width;
+				x = AddIcon(context, x, y, context.IconProvider.Change, 1, HotSpotType.ChangeClassType);
+				size.Width = Math.Max(size.Width, x - origX);
+				size.Height += context.Font.Height;
+
+				var instructionSize = DrawInstructions(context, tx, y + 4);
 				size.Width = Math.Max(size.Width, instructionSize.Width + tx - origX);
 				size.Height += instructionSize.Height + 4;
 			}
@@ -87,17 +94,17 @@ namespace ReClassNET.Nodes
 			return size;
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
 				return HiddenHeight;
 			}
 
-			var height = view.Font.Height;
-			if (levelsOpen[view.Level])
+			var height = context.Font.Height;
+			if (LevelsOpen[context.Level])
 			{
-				height += instructions.Count * view.Font.Height;
+				height += Instructions.Count * context.Font.Height;
 			}
 			return height;
 		}
@@ -112,22 +119,22 @@ namespace ReClassNET.Nodes
 			}
 		}
 
-		private void DisassembleRemoteCode(MemoryBuffer memory, IntPtr address)
+		private void DisassembleRemoteCode(RemoteProcess process, IntPtr address)
 		{
-			Contract.Requires(memory != null);
+			Contract.Requires(process != null);
 
-			if (this.address != address)
+			if (this.Address != address)
 			{
-				instructions.Clear();
+				Instructions.Clear();
 
-				this.address = address;
+				this.Address = address;
 
-				if (!address.IsNull() && memory.Process.IsValid)
+				if (!address.IsNull() && process.IsValid)
 				{
-					DisassembleRemoteCode(memory, address, out memorySize);
+					DisassembleRemoteCode(process, address, out memorySize);
 				}
 
-				ParentNode?.ChildHasChanged(this);
+				GetParentContainer()?.ChildHasChanged(this);
 			}
 		}
 	}

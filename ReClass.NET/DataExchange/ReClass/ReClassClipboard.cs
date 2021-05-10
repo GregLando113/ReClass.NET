@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows.Forms;
 using ReClassNET.Logger;
 using ReClassNET.Nodes;
+using ReClassNET.Project;
 
 namespace ReClassNET.DataExchange.ReClass
 {
@@ -24,12 +25,11 @@ namespace ReClassNET.DataExchange.ReClass
 			Contract.Requires(nodes != null);
 			Contract.Requires(logger != null);
 
-			using (var ms = new MemoryStream())
-			{
-				ReClassNetFile.WriteNodes(ms, nodes, logger);
+			using var ms = new MemoryStream();
 
-				Clipboard.SetData(ClipboardFormat, ms.ToArray());
-			}
+			ReClassNetFile.SerializeNodesToStream(ms, nodes, logger);
+
+			Clipboard.SetData(ClipboardFormat, ms.ToArray());
 		}
 
 		/// <summary>Pastes nodes from the clipboard.</summary>
@@ -42,23 +42,14 @@ namespace ReClassNET.DataExchange.ReClass
 			Contract.Requires(logger != null);
 			Contract.Ensures(Contract.Result<Tuple<List<ClassNode>, List<BaseNode>>>() != null);
 
-			var classes = new List<ClassNode>();
-			var nodes = new List<BaseNode>();
-
-			if (ContainsNodes)
+			if (ContainsNodes && Clipboard.GetData(ClipboardFormat) is byte[] data)
 			{
-				if (Clipboard.GetData(ClipboardFormat) is byte[] data)
-				{
-					using (var ms = new MemoryStream(data))
-					{
-						var result = ReClassNetFile.ReadNodes(ms, templateProject, logger);
-						classes.AddRange(result.Item1);
-						nodes.AddRange(result.Item2);
-					}
-				}
+				using var ms = new MemoryStream(data);
+
+				return ReClassNetFile.DeserializeNodesFromStream(ms, templateProject, logger);
 			}
 
-			return Tuple.Create(classes, nodes);
+			return Tuple.Create(new List<ClassNode>(), new List<BaseNode>());
 		}
 	}
 }

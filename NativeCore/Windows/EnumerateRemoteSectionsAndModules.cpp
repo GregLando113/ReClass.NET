@@ -1,9 +1,114 @@
 #include <windows.h>
+#include <winternl.h>
 #include <tlhelp32.h>
 #include <vector>
 #include <algorithm>
+#include <functional>
 
 #include "NativeCore.hpp"
+
+PPEB GetRemotePeb(const HANDLE process)
+{
+	static auto* const ntdll = GetModuleHandle(TEXT("ntdll"));
+	if (!ntdll)
+	{
+		return nullptr;
+	}
+
+	using tNtQueryInformationProcess = NTSTATUS (NTAPI*)(_In_ HANDLE ProcessHandle, _In_ PROCESSINFOCLASS ProcessInformationClass, _Out_writes_bytes_(ProcessInformationLength) PVOID ProcessInformation, _In_ ULONG ProcessInformationLength, _Out_opt_ PULONG ReturnLength);
+
+	static const auto pNtQueryInformationProcess = tNtQueryInformationProcess(GetProcAddress(ntdll, "NtQueryInformationProcess"));
+	if (!pNtQueryInformationProcess)
+	{
+		return nullptr;
+	}
+
+	PROCESS_BASIC_INFORMATION pbi;
+	if (!NT_SUCCESS(pNtQueryInformationProcess(process, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), nullptr)))
+	{
+		return nullptr;
+	}
+
+	return pbi.PebBaseAddress;
+}
+
+using InternalEnumerateRemoteModulesCallback = std::function<void(EnumerateRemoteModuleData&)>;
+
+bool EnumerateRemoteModulesNative(const RC_Pointer process, const InternalEnumerateRemoteModulesCallback& callback)
+{
+	auto* const ppeb = GetRemotePeb(process);
+	if (ppeb == nullptr)
+	{
+		return false;
+	}
+	
+	PPEB_LDR_DATA ldr;
+	if (!ReadRemoteMemory(process, &ppeb->Ldr, &ldr, 0, sizeof(PPEB_LDR_DATA)))
+	{
+		return false;
+	}
+
+	auto* const head = &ldr->InMemoryOrderModuleList;
+	PLIST_ENTRY current;
+	if (!ReadRemoteMemory(process, &head->Flink, &current, 0, sizeof(PLIST_ENTRY)))
+	{
+		return false;
+	}
+	
+	while (current != head)
+	{
+		LDR_DATA_TABLE_ENTRY entry;
+		if (!ReadRemoteMemory(process, CONTAINING_RECORD(current, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks), &entry, 0, sizeof(entry)))
+		{
+			break;
+		}
+
+		EnumerateRemoteModuleData data = {};
+		data.BaseAddress = entry.DllBase;
+		data.Size = *reinterpret_cast<ULONG*>(&entry.Reserved3[1]); // instead of undocced member could read ImageSize from headers
+
+		const auto length = std::min<int>(sizeof(RC_UnicodeChar) * (PATH_MAXIMUM_LENGTH - 1), entry.FullDllName.Length);
+		if (!ReadRemoteMemory(process, entry.FullDllName.Buffer, data.Path, 0, length))
+		{
+			break;
+		}
+		data.Path[length / 2] = 0;
+		
+		callback(data);
+		
+		current = entry.InMemoryOrderLinks.Flink;
+	}
+	
+	return true;
+}
+
+bool EnumerateRemoteModulesWinapi(const RC_Pointer process, const InternalEnumerateRemoteModulesCallback& callback)
+{
+	auto* const handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(process));
+	if (handle == INVALID_HANDLE_VALUE)
+	{
+		return false;
+	}
+	
+	MODULEENTRY32W me32 = {};
+	me32.dwSize = sizeof(MODULEENTRY32W);
+	if (Module32FirstW(handle, &me32))
+	{
+		do
+		{
+			EnumerateRemoteModuleData data = {};
+			data.BaseAddress = me32.modBaseAddr;
+			data.Size = me32.modBaseSize;
+			std::memcpy(data.Path, me32.szExePath, std::min(MAX_PATH, PATH_MAXIMUM_LENGTH));
+
+			callback(data);
+		} while (Module32NextW(handle, &me32));
+	}
+
+	CloseHandle(handle);
+
+	return true;
+}
 
 void RC_CallConv EnumerateRemoteSectionsAndModules(RC_Pointer process, EnumerateRemoteSectionsCallback callbackSection, EnumerateRemoteModulesCallback callbackModule)
 {
@@ -14,28 +119,28 @@ void RC_CallConv EnumerateRemoteSectionsAndModules(RC_Pointer process, Enumerate
 
 	std::vector<EnumerateRemoteSectionData> sections;
 
-	MEMORY_BASIC_INFORMATION memInfo = { };
-	memInfo.RegionSize = 0x1000;
+	MEMORY_BASIC_INFORMATION memory = { };
+	memory.RegionSize = 0x1000;
 	size_t address = 0;
-	while (VirtualQueryEx(process, reinterpret_cast<LPCVOID>(address), &memInfo, sizeof(MEMORY_BASIC_INFORMATION)) != 0 && address + memInfo.RegionSize > address)
+	while (VirtualQueryEx(process, reinterpret_cast<LPCVOID>(address), &memory, sizeof(MEMORY_BASIC_INFORMATION)) != 0 && address + memory.RegionSize > address)
 	{
-		if (memInfo.State == MEM_COMMIT)
+		if (memory.State == MEM_COMMIT)
 		{
 			EnumerateRemoteSectionData section = {};
-			section.BaseAddress = memInfo.BaseAddress;
-			section.Size = memInfo.RegionSize;
+			section.BaseAddress = memory.BaseAddress;
+			section.Size = memory.RegionSize;
 			
 			section.Protection = SectionProtection::NoAccess;
-			if ((memInfo.Protect & PAGE_EXECUTE) == PAGE_EXECUTE) section.Protection |= SectionProtection::Execute;
-			if ((memInfo.Protect & PAGE_EXECUTE_READ) == PAGE_EXECUTE_READ) section.Protection |= SectionProtection::Execute | SectionProtection::Read;
-			if ((memInfo.Protect & PAGE_EXECUTE_READWRITE) == PAGE_EXECUTE_READWRITE) section.Protection |= SectionProtection::Execute | SectionProtection::Read | SectionProtection::Write;
-			if ((memInfo.Protect & PAGE_EXECUTE_WRITECOPY) == PAGE_EXECUTE_READWRITE) section.Protection |= SectionProtection::Execute | SectionProtection::Read | SectionProtection::CopyOnWrite;
-			if ((memInfo.Protect & PAGE_READONLY) == PAGE_READONLY) section.Protection |= SectionProtection::Read;
-			if ((memInfo.Protect & PAGE_READWRITE) == PAGE_READWRITE) section.Protection |= SectionProtection::Read | SectionProtection::Write;
-			if ((memInfo.Protect & PAGE_WRITECOPY) == PAGE_WRITECOPY) section.Protection |= SectionProtection::Read | SectionProtection::CopyOnWrite;
-			if ((memInfo.Protect & PAGE_GUARD) == PAGE_GUARD) section.Protection |= SectionProtection::Guard;
+			if ((memory.Protect & PAGE_EXECUTE) == PAGE_EXECUTE) section.Protection |= SectionProtection::Execute;
+			if ((memory.Protect & PAGE_EXECUTE_READ) == PAGE_EXECUTE_READ) section.Protection |= SectionProtection::Execute | SectionProtection::Read;
+			if ((memory.Protect & PAGE_EXECUTE_READWRITE) == PAGE_EXECUTE_READWRITE) section.Protection |= SectionProtection::Execute | SectionProtection::Read | SectionProtection::Write;
+			if ((memory.Protect & PAGE_EXECUTE_WRITECOPY) == PAGE_EXECUTE_WRITECOPY) section.Protection |= SectionProtection::Execute | SectionProtection::Read | SectionProtection::CopyOnWrite;
+			if ((memory.Protect & PAGE_READONLY) == PAGE_READONLY) section.Protection |= SectionProtection::Read;
+			if ((memory.Protect & PAGE_READWRITE) == PAGE_READWRITE) section.Protection |= SectionProtection::Read | SectionProtection::Write;
+			if ((memory.Protect & PAGE_WRITECOPY) == PAGE_WRITECOPY) section.Protection |= SectionProtection::Read | SectionProtection::CopyOnWrite;
+			if ((memory.Protect & PAGE_GUARD) == PAGE_GUARD) section.Protection |= SectionProtection::Guard;
 			
-			switch (memInfo.Type)
+			switch (memory.Type)
 			{
 			case MEM_IMAGE:
 				section.Type = SectionType::Image;
@@ -50,87 +155,87 @@ void RC_CallConv EnumerateRemoteSectionsAndModules(RC_Pointer process, Enumerate
 
 			section.Category = section.Type == SectionType::Private ? SectionCategory::HEAP : SectionCategory::Unknown;
 
-			sections.push_back(std::move(section));
+			sections.push_back(section);
 		}
-		address = reinterpret_cast<size_t>(memInfo.BaseAddress) + memInfo.RegionSize;
+		address = reinterpret_cast<size_t>(memory.BaseAddress) + memory.RegionSize;
 	}
 
-	const auto handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(process));
-	if (handle != INVALID_HANDLE_VALUE)
+	const auto moduleEnumerator = [&](EnumerateRemoteModuleData& data)
 	{
-		MODULEENTRY32W me32 = {};
-		me32.dwSize = sizeof(MODULEENTRY32W);
-		if (Module32FirstW(handle, &me32))
+		if (callbackModule != nullptr)
 		{
-			do
-			{
-				if (callbackModule != nullptr)
-				{
-					EnumerateRemoteModuleData data = {};
-					data.BaseAddress = me32.modBaseAddr;
-					data.Size = me32.modBaseSize;
-					std::memcpy(data.Path, me32.szExePath, std::min(MAX_PATH, PATH_MAXIMUM_LENGTH));
-
-					callbackModule(&data);
-				}
-
-				if (callbackSection != nullptr)
-				{
-					auto it = std::lower_bound(std::begin(sections), std::end(sections), static_cast<LPVOID>(me32.modBaseAddr), [&sections](const auto& lhs, const LPVOID& rhs)
-					{
-						return lhs.BaseAddress < rhs;
-					});
-
-					IMAGE_DOS_HEADER DosHdr = {};
-					IMAGE_NT_HEADERS NtHdr = {};
-
-					ReadRemoteMemory(process, me32.modBaseAddr, &DosHdr, 0, sizeof(IMAGE_DOS_HEADER));
-					ReadRemoteMemory(process, me32.modBaseAddr + DosHdr.e_lfanew, &NtHdr, 0, sizeof(IMAGE_NT_HEADERS));
-
-					std::vector<IMAGE_SECTION_HEADER> sectionHeaders(NtHdr.FileHeader.NumberOfSections);
-					ReadRemoteMemory(process, me32.modBaseAddr + DosHdr.e_lfanew + sizeof(IMAGE_NT_HEADERS), sectionHeaders.data(), 0, NtHdr.FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
-					for (auto i = 0; i < NtHdr.FileHeader.NumberOfSections; ++i)
-					{
-						auto&& sectionHeader = sectionHeaders[i];
-
-						const auto sectionAddress = reinterpret_cast<size_t>(me32.modBaseAddr) + sectionHeader.VirtualAddress;
-						for (auto j = it; j != std::end(sections); ++j)
-						{
-							if (sectionAddress >= reinterpret_cast<size_t>(j->BaseAddress) && sectionAddress < reinterpret_cast<size_t>(j->BaseAddress) + static_cast<size_t>(j->Size))
-							{
-								// Copy the name because it is not null padded.
-								char buffer[IMAGE_SIZEOF_SHORT_NAME + 1] = { 0 };
-								std::memcpy(buffer, sectionHeader.Name, IMAGE_SIZEOF_SHORT_NAME);
-
-								if (std::strcmp(buffer, ".text") == 0 || std::strcmp(buffer, "code") == 0)
-								{
-									j->Category = SectionCategory::CODE;
-								}
-								else if (std::strcmp(buffer, ".data") == 0 || std::strcmp(buffer, "data") == 0 || std::strcmp(buffer, ".rdata") == 0 || std::strcmp(buffer, ".idata") == 0)
-								{
-									j->Category = SectionCategory::DATA;
-								}
-
-								MultiByteToUnicode(buffer, j->Name, IMAGE_SIZEOF_SHORT_NAME);
-								std::memcpy(j->ModulePath, me32.szExePath, std::min(MAX_PATH, PATH_MAXIMUM_LENGTH));
-
-								break;
-							}
-						}
-
-					}
-				}
-			} while (Module32NextW(handle, &me32));
+			callbackModule(&data);
 		}
-
-		CloseHandle(handle);
 
 		if (callbackSection != nullptr)
 		{
-			for (auto&& section : sections)
+			auto it = std::lower_bound(std::begin(sections), std::end(sections), static_cast<LPVOID>(data.BaseAddress), [&sections](const auto& lhs, const LPVOID& rhs)
 			{
-				callbackSection(&section);
+				return lhs.BaseAddress < rhs;
+			});
+
+			IMAGE_DOS_HEADER imageDosHeader = {};
+			IMAGE_NT_HEADERS imageNtHeaders = {};
+
+			if (!ReadRemoteMemory(process, data.BaseAddress, &imageDosHeader, 0, sizeof(IMAGE_DOS_HEADER))
+				|| !ReadRemoteMemory(process, PUCHAR(data.BaseAddress) + imageDosHeader.e_lfanew, &imageNtHeaders, 0, sizeof(IMAGE_NT_HEADERS)))
+			{
+				return;
 			}
+
+			std::vector<IMAGE_SECTION_HEADER> sectionHeaders(imageNtHeaders.FileHeader.NumberOfSections);
+			ReadRemoteMemory(process, PUCHAR(data.BaseAddress) + imageDosHeader.e_lfanew + sizeof(IMAGE_NT_HEADERS), sectionHeaders.data(), 0, imageNtHeaders.FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER));
+			for (auto&& sectionHeader : sectionHeaders)
+			{
+				const auto sectionAddress = reinterpret_cast<size_t>(data.BaseAddress) + sectionHeader.VirtualAddress;
+
+				for (; it != std::end(sections); ++it)
+				{
+					auto&& section = *it;
+					
+					if (sectionAddress >= reinterpret_cast<size_t>(section.BaseAddress) 
+						&& sectionAddress < reinterpret_cast<size_t>(section.BaseAddress) + static_cast<size_t>(section.Size)
+						&& sectionHeader.VirtualAddress + sectionHeader.Misc.VirtualSize <= data.Size)
+					{
+						if ((sectionHeader.Characteristics & IMAGE_SCN_CNT_CODE) == IMAGE_SCN_CNT_CODE)
+						{
+							section.Category = SectionCategory::CODE;
+						}
+						else if (sectionHeader.Characteristics & (IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_CNT_UNINITIALIZED_DATA))
+						{
+							section.Category = SectionCategory::DATA;
+						}
+
+						try
+						{
+							// Copy the name because it is not null padded.
+							char buffer[IMAGE_SIZEOF_SHORT_NAME + 1] = { 0 };
+							std::memcpy(buffer, sectionHeader.Name, IMAGE_SIZEOF_SHORT_NAME);
+							MultiByteToUnicode(buffer, section.Name, IMAGE_SIZEOF_SHORT_NAME);
+						}
+						catch (std::range_error &)
+						{
+							std::memset(section.Name, 0, sizeof(section.Name));
+						}
+						std::memcpy(section.ModulePath, data.Path, std::min(MAX_PATH, PATH_MAXIMUM_LENGTH));
+
+						break;
+					}
+				}
+			}
+		}
+	};
+	
+	if (!EnumerateRemoteModulesNative(process, moduleEnumerator))
+	{
+		EnumerateRemoteModulesWinapi(process, moduleEnumerator);
+	}
+
+	if (callbackSection != nullptr)
+	{
+		for (auto&& section : sections)
+		{
+			callbackSection(&section);
 		}
 	}
 }

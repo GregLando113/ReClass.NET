@@ -1,8 +1,11 @@
-﻿using System;
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
+using ReClassNET.Controls;
+using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
+using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
 {
@@ -48,7 +51,13 @@ namespace ReClassNET.Nodes
 		{
 			Bits = IntPtr.Size * 8;
 
-			levelsOpen.DefaultValue = true;
+			LevelsOpen.DefaultValue = true;
+		}
+
+		public override void GetUserInterfaceInfo(out string name, out Image icon)
+		{
+			name = "Bitfield";
+			icon = Properties.Resources.B16x16_Button_Bits;
 		}
 
 		public override void CopyFromNode(BaseNode node)
@@ -56,6 +65,27 @@ namespace ReClassNET.Nodes
 			base.CopyFromNode(node);
 
 			Bits = node.MemorySize * 8;
+		}
+
+		/// <summary>
+		/// Gets the underlaying node for the bit field.
+		/// </summary>
+		/// <returns></returns>
+		public BaseNumericNode GetUnderlayingNode()
+		{
+			switch (Bits)
+			{
+				case 8:
+					return new UInt8Node();
+				case 16:
+					return new UInt16Node();
+				case 32:
+					return new UInt32Node();
+				case 64:
+					return new UInt64Node();
+			}
+
+			throw new Exception(); // TODO
 		}
 
 		/// <summary>Converts the memory value to a bit string.</summary>
@@ -66,97 +96,99 @@ namespace ReClassNET.Nodes
 			Contract.Requires(memory != null);
 			Contract.Ensures(Contract.Result<string>() != null);
 
-			string str;
 			switch(bits)
 			{
 				case 64:
-					str = Convert.ToString(memory.ReadInt64(Offset), 2);
-					break;
+					return BitString.ToString(memory.ReadInt64(Offset));
 				case 32:
-					str = Convert.ToString(memory.ReadInt32(Offset), 2);
-					break;
+					return BitString.ToString(memory.ReadInt32(Offset));
 				case 16:
-					str = Convert.ToString(memory.ReadInt16(Offset), 2);
-					break;
+					return BitString.ToString(memory.ReadInt16(Offset));
 				default:
-					str = Convert.ToString(memory.ReadUInt8(Offset), 2);
-					break;
+					return BitString.ToString(memory.ReadUInt8(Offset));
 			}
-			return str.PadLeft(bits, '0');
 		}
 
-		public override Size Draw(ViewInfo view, int x, int y)
+		public override Size Draw(DrawContext context, int x, int y)
 		{
-			if (IsHidden)
-			{
-				return DrawHidden(view, x, y);
-			}
+			const int BitsPerBlock = 4;
 
-			DrawInvalidMemoryIndicator(view, y);
+			if (IsHidden && !IsWrapped)
+			{
+				return DrawHidden(context, x, y);
+			}
 
 			var origX = x;
 			var origY = y;
 
-			AddSelection(view, x, y, view.Font.Height);
+			AddSelection(context, x, y, context.Font.Height);
 
-			x += TextPadding + Icons.Dimensions;
+			x = AddIconPadding(context, x);
+			x = AddIconPadding(context, x);
 
-			x = AddAddressOffset(view, x, y);
+			x = AddAddressOffset(context, x, y);
 
-			x = AddText(view, x, y, view.Settings.TypeColor, HotSpot.NoneId, "Bits") + view.Font.Width;
-			x = AddText(view, x, y, view.Settings.NameColor, HotSpot.NameId, Name) + view.Font.Width;
+			x = AddText(context, x, y, context.Settings.TypeColor, HotSpot.NoneId, "Bits") + context.Font.Width;
+			if (!IsWrapped)
+			{
+				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name) + context.Font.Width;
+			}
 
-			x = AddOpenClose(view, x, y) + view.Font.Width;
+			x = AddOpenCloseIcon(context, x, y) + context.Font.Width;
 
 			var tx = x - 3;
 
 			for (var i = 0; i < bits; ++i)
 			{
-				var rect = new Rectangle(x + i * view.Font.Width, y, view.Font.Width, view.Font.Height);
-				AddHotSpot(view, rect, string.Empty, i, HotSpotType.Edit);
+				var rect = new Rectangle(x + (i + i / BitsPerBlock) * context.Font.Width, y, context.Font.Width, context.Font.Height);
+				AddHotSpot(context, rect, string.Empty, i, HotSpotType.Edit);
 			}
-			x = AddText(view, x, y, view.Settings.ValueColor, HotSpot.NoneId, ConvertValueToBitString(view.Memory)) + view.Font.Width;
 
-			x += view.Font.Width;
+			var value = ConvertValueToBitString(context.Memory);
 
-			x = AddComment(view, x, y);
+			x = AddText(context, x, y, context.Settings.ValueColor, HotSpot.NoneId, value) + context.Font.Width;
 
-			if (levelsOpen[view.Level])
+			x += context.Font.Width;
+
+			x = AddComment(context, x, y);
+
+			DrawInvalidMemoryIndicatorIcon(context, y);
+			AddContextDropDownIcon(context, y);
+			AddDeleteIcon(context, y);
+
+			if (LevelsOpen[context.Level])
 			{
-				y += view.Font.Height;
+				y += context.Font.Height;
 
 				var format = new StringFormat(StringFormatFlags.DirectionVertical);
 
-				using (var brush = new SolidBrush(view.Settings.ValueColor))
+				using (var brush = new SolidBrush(context.Settings.ValueColor))
 				{
-					view.Context.DrawString("1", view.Font.Font, brush, tx + (bits - 1) * view.Font.Width + 1, y, format);
+					var maxCharCount = bits + (bits / 4 - 1) - 1;
 
-					for (var i = 8; i <= bits; i += 8)
+					for (int bitCount = 0, padding = 0; bitCount < bits; bitCount += 4, padding += 5)
 					{
-						view.Context.DrawString(i.ToString(), view.Font.Font, brush, tx  + (bits - i) * view.Font.Width, y, format);
+						context.Graphics.DrawString(bitCount.ToString(), context.Font.Font, brush, tx + (maxCharCount - padding) * context.Font.Width, y, format);
 					}
 				}
 
-				y += 2;
+				y += 8;
 			}
 
-			AddTypeDrop(view, y);
-			AddDelete(view, y);
-
-			return new Size(x - origX, y - origY + view.Font.Height);
+			return new Size(x - origX, y - origY + context.Font.Height);
 		}
 
-		public override int CalculateDrawnHeight(ViewInfo view)
+		public override int CalculateDrawnHeight(DrawContext context)
 		{
-			if (IsHidden)
+			if (IsHidden && !IsWrapped)
 			{
 				return HiddenHeight;
 			}
 
-			var height = view.Font.Height;
-			if (levelsOpen[view.Level])
+			var height = context.Font.Height;
+			if (LevelsOpen[context.Level])
 			{
-				height += view.Font.Height + 2;
+				height += context.Font.Height + 8;
 			}
 			return height;
 		}
@@ -182,7 +214,7 @@ namespace ReClassNET.Nodes
 					{
 						val &= (byte)~(1 << bit);
 					}
-					spot.Memory.Process.WriteRemoteMemory(spot.Address + add, val);
+					spot.Process.WriteRemoteMemory(spot.Address + add, val);
 				}
 			}
 		}
