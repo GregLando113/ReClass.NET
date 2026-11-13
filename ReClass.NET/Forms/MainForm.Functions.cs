@@ -154,7 +154,13 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			(node as BaseContainerNode ?? node.GetParentContainer())?.AddBytes(bytes);
+			var container = node as BaseContainerNode ?? node.GetParentContainer();
+			if (container == null || !CanAddBytesToContainer(container, bytes))
+			{
+				return;
+			}
+
+			container.AddBytes(bytes);
 
 			Invalidate();
 		}
@@ -173,9 +179,74 @@ namespace ReClassNET.Forms
 				return;
 			}
 
-			(node as BaseContainerNode ?? node.GetParentContainer())?.InsertBytes(node, bytes);
+			var container = node as BaseContainerNode ?? node.GetParentContainer();
+			if (container == null || !CanAddBytesToContainer(container, bytes))
+			{
+				return;
+			}
+
+			container.InsertBytes(node, bytes);
 
 			Invalidate();
+		}
+
+		/// <summary>
+		/// Checks if <paramref name="bytes"/> bytes can be added to the container without shifting the layout of the classes which embed it.
+		/// Shows a message if that's not possible.
+		/// </summary>
+		private bool CanAddBytesToContainer(BaseContainerNode container, int bytes)
+		{
+			Contract.Requires(container != null);
+
+			bool canResize;
+			string reason;
+			switch (container)
+			{
+				case ClassNode classNode:
+					canResize = StructureLayout.CanResizeClass(classNode, classNode.MemorySize + bytes, CurrentProject.Classes, out reason);
+					break;
+				case UnionNode unionNode:
+					// Every added hex node becomes a separate union member.
+					canResize = StructureLayout.CanResize(unionNode, Math.Max(unionNode.MemorySize, Math.Min(bytes, IntPtr.Size)), out reason);
+					break;
+				default:
+					return true;
+			}
+
+			if (!canResize)
+			{
+				ShowStructureLayoutConflict(reason);
+			}
+
+			return canResize;
+		}
+
+		/// <summary>
+		/// Checks if <paramref name="node"/> can change its size to <paramref name="newSize"/> without shifting other nodes.
+		/// Shows a message if that's not possible.
+		/// </summary>
+		private static bool CanResizeNode(BaseNode node, int newSize)
+		{
+			Contract.Requires(node != null);
+
+			if (!StructureLayout.CanResize(node, newSize, out var reason))
+			{
+				ShowStructureLayoutConflict(reason);
+
+				return false;
+			}
+
+			return true;
+		}
+
+		private static void ShowStructureLayoutConflict(string reason)
+		{
+			MessageBox.Show(
+				reason + Environment.NewLine + Environment.NewLine + "Insert bytes after the node first to make room.",
+				"Structure Alignment",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning
+			);
 		}
 
 		/// <summary>
@@ -299,6 +370,8 @@ namespace ReClassNET.Forms
 						.GroupWhile((s1, s2) => s1.Node.Offset + s1.Node.MemorySize == s2.Node.Offset)
 				});
 
+			var conflicts = new List<string>();
+
 			foreach (var containerPartitions in hotSpotPartitions)
 			{
 				containerPartitions.Container.BeginUpdate();
@@ -310,7 +383,25 @@ namespace ReClassNET.Forms
 					{
 						var selected = hotSpotsToReplace.Dequeue();
 
+						// The node may have been absorbed by a previous (larger) replacement.
+						if (!containerPartitions.Container.ContainsNode(selected.Node))
+						{
+							continue;
+						}
+
 						var node = BaseNode.CreateInstanceFromType(type);
+
+						// Some nodes adapt their size to the replaced node.
+						node.CopyFromNode(selected.Node);
+
+						if (!StructureLayout.CanResize(selected.Node, node.MemorySize, out var reason))
+						{
+							conflicts.Add(reason);
+
+							RemoveClassCreatedForNode(node);
+
+							continue;
+						}
 
 						var createdNodes = new List<BaseNode>();
 						containerPartitions.Container.ReplaceChildNode(selected.Node, node, ref createdNodes);
@@ -340,6 +431,30 @@ namespace ReClassNET.Forms
 			if (newSelected.Count > 0)
 			{
 				memoryViewControl.SetSelectedNodes(newSelected);
+			}
+
+			if (conflicts.Count > 0)
+			{
+				ShowStructureLayoutConflict($"{conflicts.Count} node(s) were not replaced:" + Environment.NewLine + string.Join(Environment.NewLine, conflicts));
+			}
+		}
+
+		/// <summary>
+		/// Removes the class which got created by the initialization of <paramref name="node"/> (e.g. a new class instance or pointer) if the node is discarded.
+		/// Must only be called for freshly created nodes.
+		/// </summary>
+		private void RemoveClassCreatedForNode(BaseNode node)
+		{
+			if (node is BaseWrapperNode wrapperNode && wrapperNode.ResolveMostInnerNode() is ClassNode classNode && CurrentProject.ContainsClass(classNode.Uuid))
+			{
+				try
+				{
+					CurrentProject.Remove(classNode);
+				}
+				catch (ClassReferencedException)
+				{
+					// Should not happen for a fresh class.
+				}
 			}
 		}
 
@@ -375,40 +490,81 @@ namespace ReClassNET.Forms
 			}
 
 			var selectedNodes = memoryViewControl.GetSelectedNodes();
-			if (selectedNodes.Count == 1)
+			if (selectedNodes.Count != 1)
 			{
-				var selectedNode = selectedNodes[0].Node;
-				var containerNode = selectedNode.GetParentContainer();
-				var classNode = selectedNode.GetParentClass();
-				if (containerNode != null && classNode != null)
+				return;
+			}
+
+			var selected = selectedNodes[0];
+			var selectedNode = selected.Node;
+			if (selectedNode is ClassNode)
+			{
+				return;
+			}
+
+			var containerNode = selectedNode.GetParentContainer();
+			var classNode = selectedNode.GetParentClass();
+			if (containerNode == null || classNode == null || !containerNode.ContainsNode(selectedNode))
+			{
+				return;
+			}
+
+			var nodesToPaste = new List<BaseNode>();
+			foreach (var node in nodes)
+			{
+				if (node is BaseWrapperNode)
 				{
-					containerNode.BeginUpdate();
+					var rootWrapper = node.GetRootWrapperNode();
+					Debug.Assert(rootWrapper == node);
 
-					foreach (var node in nodes)
+					if (rootWrapper.ShouldPerformCycleCheckForInnerNode())
 					{
-						if (node is BaseWrapperNode)
+						if (rootWrapper.ResolveMostInnerNode() is ClassNode innerNode)
 						{
-							var rootWrapper = node.GetRootWrapperNode();
-							Debug.Assert(rootWrapper == node);
-
-							if (rootWrapper.ShouldPerformCycleCheckForInnerNode())
+							if (!IsCycleFree(classNode, innerNode))
 							{
-								if (rootWrapper.ResolveMostInnerNode() is ClassNode innerNode)
-								{
-									if (!IsCycleFree(classNode, innerNode))
-									{
-										continue;
-									}
-								}
+								continue;
 							}
 						}
-
-						containerNode.InsertNode(selectedNode, node);
 					}
+				}
 
-					containerNode.EndUpdate();
+				if (containerNode.CanHandleChildNode(node))
+				{
+					nodesToPaste.Add(node);
 				}
 			}
+
+			if (nodesToPaste.Count == 0)
+			{
+				return;
+			}
+
+			// Pasting follows the replacement rules: the pasted nodes replace the selected node and
+			// absorb the following undefined bytes if they are larger.
+			var pastedSize = containerNode is UnionNode
+				? nodesToPaste.Max(n => n.MemorySize)
+				: nodesToPaste.Sum(n => n.MemorySize);
+			if (!CanResizeNode(selectedNode, pastedSize))
+			{
+				return;
+			}
+
+			var baseOffset = selectedNode.Offset;
+
+			containerNode.ReplaceChildNodeWithNodes(selectedNode, nodesToPaste);
+
+			memoryViewControl.ClearSelection();
+
+			var newSelected = nodesToPaste
+				.Select(n =>
+				{
+					n.IsSelected = true;
+
+					return new MemoryViewControl.SelectedNodeInfo(n, selected.Process, selected.Memory, selected.Address + n.Offset - baseOffset, selected.Level);
+				})
+				.ToList();
+			memoryViewControl.SetSelectedNodes(newSelected);
 		}
 
 		private void EditSelectedNodeName()
@@ -422,9 +578,24 @@ namespace ReClassNET.Forms
 
 		private void RemoveSelectedNodes()
 		{
-			memoryViewControl.GetSelectedNodes()
-				.WhereNot(h => h.Node is ClassNode)
-				.ForEach(h => h.Node.GetParentContainer().RemoveNode(h.Node));
+			// Typed nodes in classes get converted back to hex nodes to keep the layout. Hex nodes get removed.
+			var nodesByContainer = memoryViewControl.GetSelectedNodes()
+				.Select(h => h.Node)
+				.WhereNot(n => n is ClassNode)
+				.GroupBy(n => n.GetParentContainer())
+				.Where(g => g.Key != null);
+
+			foreach (var group in nodesByContainer)
+			{
+				group.Key.BeginUpdate();
+
+				foreach (var node in group)
+				{
+					group.Key.UndefineOrRemoveNode(node);
+				}
+
+				group.Key.EndUpdate();
+			}
 
 			ClearSelection();
 		}

@@ -9,6 +9,8 @@ namespace ReClassNET.Nodes
 	{
 		public override int MemorySize => InnerNode.MemorySize;
 
+		public override int CalculateSizeForInner(int innerSize) => innerSize;
+
 		protected override bool PerformCycleCheck => true;
 
 		public override void GetUserInterfaceInfo(out string name, out Image icon)

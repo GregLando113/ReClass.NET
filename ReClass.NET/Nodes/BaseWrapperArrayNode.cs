@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using ReClassNET.Controls;
+using ReClassNET.Logger;
 using ReClassNET.UI;
 
 namespace ReClassNET.Nodes
@@ -8,6 +9,8 @@ namespace ReClassNET.Nodes
 	public abstract class BaseWrapperArrayNode : BaseWrapperNode
 	{
 		public override int MemorySize => InnerNode.MemorySize * Count;
+
+		public override int CalculateSizeForInner(int innerSize) => innerSize * Count;
 
 		public int CurrentIndex { get; set; }
 		public int Count { get; set; } = 1;
@@ -112,8 +115,15 @@ namespace ReClassNET.Nodes
 				{
 					if (spot.Id == 0 && !IsReadOnly)
 					{
-						if (value != 0)
+						if (value > 0)
 						{
+							if (!StructureLayout.CanResize(this, InnerNode.MemorySize * value, out var reason))
+							{
+								Program.Logger.Log(LogLevel.Warning, reason);
+
+								return;
+							}
+
 							Count = value;
 
 							if (CurrentIndex >= value)

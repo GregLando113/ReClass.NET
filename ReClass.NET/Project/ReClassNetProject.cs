@@ -73,9 +73,67 @@ namespace ReClassNET.Project
 			return classes.First(c => c.Uuid.Equals(uuid));
 		}
 
+		private int bulkLoadCount;
+		private bool isReconciling;
+
+		/// <summary>
+		/// Disables the layout reconciliation while classes get loaded (classes may be referenced before their nodes are added).
+		/// <see cref="EndBulkLoad"/> must be called afterwards.
+		/// </summary>
+		public void BeginBulkLoad()
+		{
+			bulkLoadCount++;
+		}
+
+		/// <summary>
+		/// Enables the layout reconciliation disabled by <see cref="BeginBulkLoad"/> and accepts the current layout of all classes as is.
+		/// </summary>
+		public void EndBulkLoad()
+		{
+			bulkLoadCount = Math.Max(0, bulkLoadCount - 1);
+			if (bulkLoadCount == 0)
+			{
+				classes.ForEach(c => c.ResetLayoutBaseline());
+			}
+		}
+
 		private void NodesChanged_Handler(BaseNode sender)
 		{
-			classes.ForEach(c => c.UpdateOffsets());
+			if (isReconciling)
+			{
+				return;
+			}
+
+			if (bulkLoadCount > 0)
+			{
+				classes.ForEach(c => c.UpdateOffsets());
+
+				return;
+			}
+
+			isReconciling = true;
+			try
+			{
+				// If a class changed its size, every class which embeds it has to absorb or pad the difference.
+				// Repeat until the layout is stable. Class cycles are not possible, so this terminates.
+				for (var pass = 0; pass <= classes.Count; ++pass)
+				{
+					var changed = false;
+					foreach (var classNode in classes)
+					{
+						changed |= classNode.ReconcileChildSizes();
+					}
+
+					if (!changed)
+					{
+						break;
+					}
+				}
+			}
+			finally
+			{
+				isReconciling = false;
+			}
 		}
 
 		public void Clear()

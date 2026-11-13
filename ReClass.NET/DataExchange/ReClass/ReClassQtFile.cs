@@ -52,6 +52,19 @@ namespace ReClassNET.DataExchange.ReClass
 
 		public void Load(string filePath, ILogger logger)
 		{
+			project.BeginBulkLoad();
+			try
+			{
+				LoadCore(filePath, logger);
+			}
+			finally
+			{
+				project.EndBulkLoad();
+			}
+		}
+
+		private void LoadCore(string filePath, ILogger logger)
+		{
 			var document = XDocument.Load(filePath);
 			if (document.Root == null)
 			{

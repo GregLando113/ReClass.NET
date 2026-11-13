@@ -27,6 +27,22 @@ namespace ReClassNET.DataExchange.ReClass
 			Contract.Requires(input != null);
 			Contract.Requires(logger != null);
 
+			project.BeginBulkLoad();
+			try
+			{
+				LoadCore(input, logger);
+			}
+			finally
+			{
+				project.EndBulkLoad();
+			}
+		}
+
+		private void LoadCore(Stream input, ILogger logger)
+		{
+			Contract.Requires(input != null);
+			Contract.Requires(logger != null);
+
 			using var archive = new ZipArchive(input, ZipArchiveMode.Read);
 			var dataEntry = archive.GetEntry(DataFileName);
 			if (dataEntry == null)

@@ -20,6 +20,14 @@ namespace ReClassNET.Nodes
 		/// <returns>True if the class can handle the inner node type or false otherwise.</returns>
 		public abstract bool CanChangeInnerNodeTo(BaseNode node);
 
+		/// <summary>
+		/// Calculates the size this node would have if its inner node had the size <paramref name="innerSize"/>.
+		/// The default implementation assumes the size of the wrapper doesn't depend on the inner node.
+		/// </summary>
+		/// <param name="innerSize">The size of the inner node in bytes.</param>
+		/// <returns>The resulting size of this node in bytes.</returns>
+		public virtual int CalculateSizeForInner(int innerSize) => MemorySize;
+
 		/// <summary>Changes the inner node.</summary>
 		/// <param name="node">The new node.</param>
 		public void ChangeInnerNode(BaseNode node)

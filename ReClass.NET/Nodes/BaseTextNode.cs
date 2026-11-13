@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Text;
 using ReClassNET.Controls;
 using ReClassNET.Extensions;
+using ReClassNET.Logger;
 using ReClassNET.Memory;
 using ReClassNET.UI;
 
@@ -82,6 +83,13 @@ namespace ReClassNET.Nodes
 			{
 				if (int.TryParse(spot.Text, out var val) && val > 0)
 				{
+					if (!StructureLayout.CanResize(this, val * CharacterSize, out var reason))
+					{
+						Program.Logger.Log(LogLevel.Warning, reason);
+
+						return;
+					}
+
 					Length = val;
 
 					GetParentContainer()?.ChildHasChanged(this);

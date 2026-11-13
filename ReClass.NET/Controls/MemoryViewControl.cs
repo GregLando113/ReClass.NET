@@ -298,7 +298,8 @@ namespace ReClassNET.Controls
 					}
 					else if (hotSpot.Type == HotSpotType.Delete)
 					{
-						hotSpot.Node.GetParentContainer().RemoveNode(hotSpot.Node);
+						// Typed nodes in classes get converted back to hex nodes to keep the layout. Hex nodes get removed.
+						hotSpot.Node.GetParentContainer()?.UndefineOrRemoveNode(hotSpot.Node);
 
 						invalidate = true;
 

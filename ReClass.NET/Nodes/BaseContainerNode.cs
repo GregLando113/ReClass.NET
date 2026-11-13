@@ -10,6 +10,13 @@ namespace ReClassNET.Nodes
 
 		private int updateCount;
 
+		/// <summary>
+		/// The size of every child as of the last layout reconciliation (see <see cref="ReconcileChildSizes"/>).
+		/// Used to detect children whose size changed in place (e.g. an embedded class grew) so the following
+		/// undefined bytes can be absorbed or padded and the offsets of all other children stay the same.
+		/// </summary>
+		private readonly Dictionary<BaseNode, int> knownChildSizes = new Dictionary<BaseNode, int>();
+
 		/// <summary>The child nodes of the container.</summary>
 		public IReadOnlyList<BaseNode> Nodes => nodes;
 
@@ -149,8 +156,14 @@ namespace ReClassNET.Nodes
 			{
 				UpdateOffsets();
 
-				GetParentContainer()?.ChildHasChanged(this);
+				NotifyNodesUpdated();
 			}
+		}
+
+		/// <summary>Called after the child nodes have changed. Informs the parent container about the change.</summary>
+		protected virtual void NotifyNodesUpdated()
+		{
+			GetParentContainer()?.ChildHasChanged(this);
 		}
 
 		/// <summary>Replaces the old node with the new node.</summary>
@@ -188,6 +201,8 @@ namespace ReClassNET.Nodes
 
 			nodes[index] = newNode;
 
+			knownChildSizes.Remove(oldNode);
+
 			if (ShouldCompensateSizeChanges)
 			{
 				var oldSize = oldNode.MemorySize;
@@ -195,15 +210,202 @@ namespace ReClassNET.Nodes
 
 				if (newSize < oldSize)
 				{
-					InsertBytes(index + 1, oldSize - newSize, ref additionalCreatedNodes);
+					InsertBytesCore(index + 1, oldSize - newSize, ref additionalCreatedNodes);
 				}
-				/*else if (newSize > oldSize)
+				else if (newSize > oldSize)
 				{
-					RemoveNodes(index + 1, newSize - oldSize);
-				}*/
+					AbsorbFollowingHexBytes(index + 1, newSize - oldSize);
+				}
+
+				knownChildSizes[newNode] = newSize;
 			}
 
 			OnNodesUpdated();
+		}
+
+		/// <summary>
+		/// Replaces the old node with a sequence of new nodes (used for pasting). The new nodes keep their names.
+		/// If the container compensates size changes, the difference is padded with or absorbed from following hex nodes.
+		/// </summary>
+		/// <param name="oldNode">The node to replace.</param>
+		/// <param name="newNodes">The nodes which take the place of <paramref name="oldNode"/>.</param>
+		public void ReplaceChildNodeWithNodes(BaseNode oldNode, IReadOnlyList<BaseNode> newNodes)
+		{
+			Contract.Requires(oldNode != null);
+			Contract.Requires(newNodes != null);
+
+			foreach (var node in newNodes)
+			{
+				CheckCanHandleChildNode(node);
+			}
+
+			var index = FindNodeIndex(oldNode);
+			if (index == -1)
+			{
+				throw new ArgumentException($"Node {oldNode} is not a child of {this}.");
+			}
+
+			var oldSize = oldNode.MemorySize;
+
+			nodes.RemoveAt(index);
+			knownChildSizes.Remove(oldNode);
+
+			var insertIndex = index;
+			var newSize = 0;
+			foreach (var node in newNodes)
+			{
+				node.ParentNode = this;
+
+				nodes.Insert(insertIndex++, node);
+
+				newSize += node.MemorySize;
+			}
+
+			if (ShouldCompensateSizeChanges)
+			{
+				if (newSize < oldSize)
+				{
+					List<BaseNode> dummy = null;
+					InsertBytesCore(insertIndex, oldSize - newSize, ref dummy);
+				}
+				else if (newSize > oldSize)
+				{
+					AbsorbFollowingHexBytes(insertIndex, newSize - oldSize);
+				}
+
+				foreach (var node in newNodes)
+				{
+					knownChildSizes[node] = node.MemorySize;
+				}
+			}
+
+			OnNodesUpdated();
+		}
+
+		/// <summary>
+		/// Removes the hex nodes starting at <paramref name="index"/> until <paramref name="bytes"/> bytes are absorbed.
+		/// If the last absorbed hex node is only partially needed, the remaining bytes are re-inserted as hex nodes.
+		/// Does not notify about the change.
+		/// </summary>
+		/// <param name="index">The index of the first node to absorb.</param>
+		/// <param name="bytes">The number of bytes to absorb.</param>
+		/// <returns>The number of bytes which could not be absorbed because not enough hex nodes were available.</returns>
+		private int AbsorbFollowingHexBytes(int index, int bytes)
+		{
+			var absorbed = 0;
+			while (absorbed < bytes && index < nodes.Count && nodes[index] is BaseHexNode hexNode)
+			{
+				absorbed += hexNode.MemorySize;
+
+				nodes.RemoveAt(index);
+				knownChildSizes.Remove(hexNode);
+			}
+
+			if (absorbed > bytes)
+			{
+				List<BaseNode> dummy = null;
+				InsertBytesCore(index, absorbed - bytes, ref dummy);
+			}
+
+			return Math.Max(0, bytes - absorbed);
+		}
+
+		/// <summary>
+		/// Deletes a node while keeping the layout of the container. In containers which compensate size changes
+		/// (see <see cref="ShouldCompensateSizeChanges"/>) a typed node gets converted back to hex nodes of the same size.
+		/// Hex nodes and nodes of other containers get removed.
+		/// </summary>
+		/// <param name="node">The node to delete.</param>
+		/// <returns>True if the node was found, false otherwise.</returns>
+		public bool UndefineOrRemoveNode(BaseNode node)
+		{
+			Contract.Requires(node != null);
+
+			if (!ShouldCompensateSizeChanges || node is BaseHexNode)
+			{
+				return RemoveNode(node);
+			}
+
+			var index = FindNodeIndex(node);
+			if (index == -1)
+			{
+				return false;
+			}
+
+			var size = node.MemorySize;
+
+			nodes.RemoveAt(index);
+			knownChildSizes.Remove(node);
+
+			List<BaseNode> dummy = null;
+			InsertBytesCore(index, size, ref dummy);
+
+			OnNodesUpdated();
+
+			return true;
+		}
+
+		/// <summary>
+		/// Compares the size of every child with its size at the last reconciliation. If a child grew, the following hex
+		/// nodes get absorbed. If a child shrank, the gap gets padded with hex nodes. This keeps the offsets of all other
+		/// children stable when a child changes its size in place (e.g. an embedded class or an array count changed).
+		/// Does not notify about the change.
+		/// </summary>
+		/// <returns>True if nodes were absorbed or inserted, false otherwise.</returns>
+		internal bool ReconcileChildSizes()
+		{
+			if (updateCount > 0 || !ShouldCompensateSizeChanges)
+			{
+				UpdateOffsets();
+
+				return false;
+			}
+
+			var changed = false;
+
+			for (var i = 0; i < nodes.Count; ++i)
+			{
+				var node = nodes[i];
+				if (!knownChildSizes.TryGetValue(node, out var knownSize))
+				{
+					continue;
+				}
+
+				var delta = node.MemorySize - knownSize;
+				if (delta > 0)
+				{
+					// The change should have been checked with StructureLayout.CanResize before.
+					// If not enough hex bytes are available, the container has to grow.
+					AbsorbFollowingHexBytes(i + 1, delta);
+
+					changed = true;
+				}
+				else if (delta < 0)
+				{
+					List<BaseNode> dummy = null;
+					InsertBytesCore(i + 1, -delta, ref dummy);
+
+					changed = true;
+				}
+			}
+
+			ResetLayoutBaseline();
+
+			return changed;
+		}
+
+		/// <summary>
+		/// Records the current size of every child as the baseline for <see cref="ReconcileChildSizes"/> without compensating any changes.
+		/// </summary>
+		internal void ResetLayoutBaseline()
+		{
+			knownChildSizes.Clear();
+			foreach (var node in nodes)
+			{
+				knownChildSizes[node] = node.MemorySize;
+			}
+
+			UpdateOffsets();
 		}
 
 		/// <summary>
@@ -263,6 +465,14 @@ namespace ReClassNET.Nodes
 				return;
 			}
 
+			InsertBytesCore(index, size, ref createdNodes);
+
+			OnNodesUpdated();
+		}
+
+		/// <summary>Inserts <paramref name="size"/> bytes at the specified position without notifying about the change.</summary>
+		private void InsertBytesCore(int index, int size, ref List<BaseNode> createdNodes)
+		{
 			while (size > 0)
 			{
 				var node = CreateDefaultNodeForSize(size);
@@ -281,8 +491,6 @@ namespace ReClassNET.Nodes
 
 				index++;
 			}
-
-			OnNodesUpdated();
 		}
 
 		/// <summary>
@@ -350,6 +558,8 @@ namespace ReClassNET.Nodes
 			var result = nodes.Remove(node);
 			if (result)
 			{
+				knownChildSizes.Remove(node);
+
 				OnNodesUpdated();
 			}
 			return result;
@@ -359,7 +569,14 @@ namespace ReClassNET.Nodes
 		/// <param name="child">The child.</param>
 		protected internal virtual void ChildHasChanged(BaseNode child)
 		{
-			// TODO Add BaseNode.GetParentContainer
+			// Forward the change so the owning class can keep its layout (e.g. the size of a union inside a class changed).
+			var parentContainer = GetParentContainer();
+			if (parentContainer != null && parentContainer != this)
+			{
+				UpdateOffsets();
+
+				parentContainer.ChildHasChanged(this);
+			}
 		}
 	}
 }

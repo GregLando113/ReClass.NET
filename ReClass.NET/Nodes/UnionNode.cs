@@ -8,7 +8,7 @@ namespace ReClassNET.Nodes
 {
 	public class UnionNode : BaseContainerNode
 	{
-		public override int MemorySize => Nodes.Max(n => n.MemorySize);
+		public override int MemorySize => Nodes.Count == 0 ? 0 : Nodes.Max(n => n.MemorySize);
 
 		protected override bool ShouldCompensateSizeChanges => false;
 

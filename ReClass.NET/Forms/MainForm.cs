@@ -557,6 +557,9 @@ namespace ReClassNET.Forms
 			{
 				if (selectedNodes[0].Node.GetParentContainer() is ClassNode parentNode)
 				{
+					// The total size doesn't change, so batch the update to keep the layout stable in between.
+					parentNode.BeginUpdate();
+
 					var newClassNode = ClassNode.Create();
 					selectedNodes.Select(h => h.Node).ForEach(newClassNode.AddNode);
 
@@ -566,6 +569,8 @@ namespace ReClassNET.Forms
 					parentNode.InsertNode(selectedNodes[0].Node, classInstanceNode);
 
 					selectedNodes.Select(h => h.Node).ForEach(c => parentNode.RemoveNode(c));
+
+					parentNode.EndUpdate();
 
 					ClearSelection();
 				}
@@ -876,7 +881,8 @@ namespace ReClassNET.Forms
 					var selectedClassNode = csf.SelectedClass;
 					if (refNode.CanChangeInnerNodeTo(selectedClassNode))
 					{
-						if (!refNode.GetRootWrapperNode().ShouldPerformCycleCheckForInnerNode() || IsCycleFree(e.Node.GetParentClass(), selectedClassNode))
+						if ((!refNode.GetRootWrapperNode().ShouldPerformCycleCheckForInnerNode() || IsCycleFree(e.Node.GetParentClass(), selectedClassNode))
+							&& CanResizeNode(refNode, refNode.CalculateSizeForInner(selectedClassNode.MemorySize)))
 						{
 							refNode.ChangeInnerNode(selectedClassNode);
 						}
@@ -891,9 +897,16 @@ namespace ReClassNET.Forms
 			{
 				var items = NodeTypesBuilder.CreateToolStripMenuItems(t =>
 				{
-					var node = BaseNode.CreateInstanceFromType(t);
+					var node = t == null ? null : BaseNode.CreateInstanceFromType(t);
 					if (wrapperNode.CanChangeInnerNodeTo(node))
 					{
+						if (node != null && !CanResizeNode(wrapperNode, wrapperNode.CalculateSizeForInner(node.MemorySize)))
+						{
+							RemoveClassCreatedForNode(node);
+
+							return;
+						}
+
 						wrapperNode.ChangeInnerNode(node);
 					}
 				}, wrapperNode.CanChangeInnerNodeTo(null));
@@ -915,7 +928,7 @@ namespace ReClassNET.Forms
 				if (csf.ShowDialog() == DialogResult.OK)
 				{
 					var @enum = csf.SelectedItem;
-					if (@enum != null)
+					if (@enum != null && CanResizeNode(enumNode, (int)@enum.Size))
 					{
 						enumNode.ChangeEnum(@enum);
 					}

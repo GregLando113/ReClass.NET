@@ -185,5 +185,12 @@ namespace ReClassNET.Nodes
 		{
 			NodesChanged?.Invoke(this);
 		}
+
+		protected override void NotifyNodesUpdated()
+		{
+			// A class can be referenced by many wrapper nodes but its ParentNode only points to the last one.
+			// Always notify the class itself so the project can update every class which embeds it.
+			ChildHasChanged(this);
+		}
 	}
 }
