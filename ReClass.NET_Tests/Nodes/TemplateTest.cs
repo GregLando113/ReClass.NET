@@ -480,5 +480,30 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(code).Contains("TLink<T> m_term;");
 			Check.That(code).Contains("TList<class Node>");
 		}
+
+		[Fact]
+		public void ClassWithImplementationPointingBackStaysEditable()
+		{
+			var linkTemplate = CreateLinkTemplate();
+			var node = CreateClass("Node", new Hex32Node(), new Hex32Node());
+			var link = Implement(linkTemplate, ("T", Instance(node)));
+			node.AddNode(link);
+
+			// Generating the link makes a node of the generated class the parent of the class.
+			Check.That(node.ParentNode.GetParentClass()).IsInstanceOf<TemplateInstanceClassNode>();
+
+			Check.That(node.IsInReadOnlyClass()).IsFalse();
+			Check.That(node.Nodes[0].IsInReadOnlyClass()).IsFalse();
+			Check.That(link.IsInReadOnlyClass()).IsFalse();
+
+			// Only the generated part is locked.
+			Check.That(link.InstanceClass.IsInReadOnlyClass()).IsTrue();
+			Check.That(link.InstanceClass.Nodes[1].IsInReadOnlyClass()).IsTrue();
+
+			Check.That(StructureLayout.CanResizeClass(node, node.MemorySize + 8, project.Classes, out _)).IsTrue();
+			var size = node.MemorySize;
+			node.AddBytes(8);
+			Check.That(node.MemorySize).IsEqualTo(size + 8);
+		}
 	}
 }

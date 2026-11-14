@@ -192,9 +192,11 @@ namespace ReClassNET.Nodes
 		/// </summary>
 		public bool IsInReadOnlyClass()
 		{
-			if (this is ClassNode classNode && classNode.IsReadOnly)
+			// A class is referenced by many nodes and its parent is only the last of them (possibly a node of a
+			// generated class which points back to the class). Only the class itself decides if it is read-only.
+			if (this is ClassNode classNode)
 			{
-				return true;
+				return classNode.IsReadOnly;
 			}
 
 			return GetParentClass()?.IsReadOnly ?? false;
