@@ -565,6 +565,15 @@ namespace ReClassNET.Nodes
 			return result;
 		}
 
+		/// <summary>Removes all nodes.</summary>
+		internal void ClearNodes()
+		{
+			nodes.Clear();
+			knownChildSizes.Clear();
+
+			OnNodesUpdated();
+		}
+
 		/// <summary>Called by a child if it has changed.</summary>
 		/// <param name="child">The child.</param>
 		protected internal virtual void ChildHasChanged(BaseNode child)

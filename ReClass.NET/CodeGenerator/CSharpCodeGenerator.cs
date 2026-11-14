@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -106,6 +106,20 @@ namespace ReClassNET.CodeGenerator
 				}
 			}
 
+			// Every used template implementation becomes its own struct.
+			var implementations = TemplateUtil.EnumerateImplementations(classesToWrite, true)
+				.Where(i => i.Template != null)
+				.GroupBy(i => i.TypeName)
+				.Select(g => g.First());
+			foreach (var implementation in implementations)
+			{
+				iw.WriteLine();
+
+				unicodeStringClassLengthsToGenerate.UnionWith(implementation.InstanceClass.Nodes.OfType<Utf16TextNode>().Select(n => n.Length));
+
+				WriteClass(iw, implementation.InstanceClass, logger, GetTemplateImplementationName(implementation));
+			}
+
 			if (unicodeStringClassLengthsToGenerate.Any())
 			{
 				foreach (var length in unicodeStringClassLengthsToGenerate)
@@ -170,7 +184,18 @@ namespace ReClassNET.CodeGenerator
 		/// <param name="writer">The writer to output to.</param>
 		/// <param name="class">The class to output.</param>
 		/// <param name="logger">The logger.</param>
-		private static void WriteClass(IndentedTextWriter writer, ClassNode @class, ILogger logger)
+		/// <summary>Gets a valid C# name for a template implementation, e.g. TArray_Skillbar.</summary>
+		private static string GetTemplateImplementationName(TemplateImplementationNode implementation)
+		{
+			var name = new string(implementation.TypeName.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
+			while (name.Contains("__"))
+			{
+				name = name.Replace("__", "_");
+			}
+			return name.Trim('_');
+		}
+
+		private static void WriteClass(IndentedTextWriter writer, ClassNode @class, ILogger logger, string name = null)
 		{
 			Contract.Requires(writer != null);
 			Contract.Requires(@class != null);
@@ -178,7 +203,7 @@ namespace ReClassNET.CodeGenerator
 
 			writer.WriteLine("[StructLayout(LayoutKind.Explicit, CharSet = CharSet.Ansi)]");
 			writer.Write("public struct ");
-			writer.Write(@class.Name);
+			writer.Write(name ?? @class.Name);
 
 			if (!string.IsNullOrEmpty(@class.Comment))
 			{
@@ -246,6 +271,7 @@ namespace ReClassNET.CodeGenerator
 			return node switch
 			{
 				EnumNode enumNode => (enumNode.Enum.Name, null),
+				TemplateImplementationNode implementationNode when implementationNode.Template != null => (GetTemplateImplementationName(implementationNode), null),
 				Utf8TextNode utf8TextNode => ("string", $"[MarshalAs(UnmanagedType.ByValTStr, SizeConst = {utf8TextNode.Length})]"),
 				Utf16TextNode utf16TextNode => (GetUnicodeStringClassName(utf16TextNode.Length), "[MarshalAs(UnmanagedType.Struct)]"),
 				_ => (null, null)

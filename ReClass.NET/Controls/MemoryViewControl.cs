@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Drawing;
@@ -299,7 +299,11 @@ namespace ReClassNET.Controls
 					else if (hotSpot.Type == HotSpotType.Delete)
 					{
 						// Typed nodes in classes get converted back to hex nodes to keep the layout. Hex nodes get removed.
-						hotSpot.Node.GetParentContainer()?.UndefineOrRemoveNode(hotSpot.Node);
+						// Nodes generated from a template can't be deleted.
+						if (!hotSpot.Node.IsInReadOnlyClass())
+						{
+							hotSpot.Node.GetParentContainer()?.UndefineOrRemoveNode(hotSpot.Node);
+						}
 
 						invalidate = true;
 
@@ -610,9 +614,15 @@ namespace ReClassNET.Controls
 			var hotSpot = e.HotSpot;
 			if (hotSpot != null)
 			{
+				// The name and comment of nodes generated from a template can't be changed.
+				var isReadOnly = hotSpot.Node.IsInReadOnlyClass() && (hotSpot.Id == HotSpot.NameId || hotSpot.Id == HotSpot.CommentId);
+
 				try
 				{
-					hotSpot.Node.Update(hotSpot);
+					if (!isReadOnly)
+					{
+						hotSpot.Node.Update(hotSpot);
+					}
 				}
 				catch (Exception ex)
 				{

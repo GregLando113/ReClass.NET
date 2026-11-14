@@ -67,6 +67,18 @@ namespace ReClassNET.Nodes
 					return CanResize(unionNode, Math.Max(newSize, otherMaxSize), out reason);
 				}
 
+				case TemplateInstanceClassNode instanceClass:
+				{
+					// A generated class has no undefined bytes of its own. The growth is passed to the implementation node.
+					var owner = instanceClass.Owner;
+					if (owner == null)
+					{
+						return true;
+					}
+
+					return CanResize(owner, owner.MemorySize + newSize - node.MemorySize, out reason);
+				}
+
 				case ClassNode classNode:
 				{
 					var index = classNode.FindNodeIndex(node);
@@ -112,11 +124,26 @@ namespace ReClassNET.Nodes
 			}
 
 			var reasons = new List<string>();
-			foreach (var wrapperNode in FindEmbeddings(classNode, classes))
+			if (classNode is TemplateNode templateNode)
 			{
-				if (!CanResize(wrapperNode, wrapperNode.CalculateSizeForInner(newSize), out var wrapperReason))
+				// Every implementation of the template grows by the same amount.
+				var delta = newSize - classNode.MemorySize;
+				foreach (var implementation in TemplateUtil.EnumerateImplementations(classes, true).Where(i => i.Template == templateNode))
 				{
-					reasons.Add(wrapperReason);
+					if (!CanResize(implementation, implementation.MemorySize + delta, out var implementationReason))
+					{
+						reasons.Add(implementationReason);
+					}
+				}
+			}
+			else
+			{
+				foreach (var wrapperNode in FindEmbeddings(classNode, classes))
+				{
+					if (!CanResize(wrapperNode, wrapperNode.CalculateSizeForInner(newSize), out var wrapperReason))
+					{
+						reasons.Add(wrapperReason);
+					}
 				}
 			}
 
@@ -150,6 +177,13 @@ namespace ReClassNET.Nodes
 				{
 					case PointerNode _:
 					case ArrayBufferNode _: // Pointers don't embed the memory of their target.
+						break;
+					case TemplateInstanceClassNode instanceClass: // Generated classes are not part of the class list.
+						foreach (var wrapperNode in instanceClass.Nodes.SelectMany(Visit))
+						{
+							yield return wrapperNode;
+						}
+						break;
 					case ClassNode _: // Other classes get visited separately.
 						break;
 					case BaseContainerNode containerNode:

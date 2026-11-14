@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.Contracts;
@@ -68,6 +68,7 @@ namespace ReClassNET.Controls
 					.OfType<BaseWrapperNode>()
 					.Select(w => w.ResolveMostInnerNode())
 					.OfType<ClassNode>()
+					.Where(c => !(c is TemplateInstanceClassNode)) // Generated classes are not part of the project.
 					.Distinct()
 					.ToList();
 
@@ -116,6 +117,29 @@ namespace ReClassNET.Controls
 			}
 		}
 
+		/// <summary>A tree node for a class template.</summary>
+		private class TemplateTreeNode : TreeNode
+		{
+			public TemplateNode Template { get; }
+
+			public TemplateTreeNode(TemplateNode template)
+			{
+				Contract.Requires(template != null);
+
+				Template = template;
+
+				ImageIndex = 4;
+				SelectedImageIndex = 4;
+
+				Update();
+			}
+
+			public void Update()
+			{
+				Text = Template.DisplayName;
+			}
+		}
+
 		private class NodeSorter : IComparer
 		{
 			public int Compare(object x, object y)
@@ -130,6 +154,10 @@ namespace ReClassNET.Controls
 				{
 					return compare.Compare(en1.Text, en2.Text);
 				}
+				if (x is TemplateTreeNode tt1 && y is TemplateTreeNode tt2)
+				{
+					return compare.Compare(tt1.Text, tt2.Text);
+				}
 				if (x is TreeNode tn1 && tn1.Parent == null && y is TreeNode tn2 && tn2.Parent == null)
 				{
 					return (int)tn1.Tag - (int)tn2.Tag;
@@ -140,6 +168,7 @@ namespace ReClassNET.Controls
 		}
 
 		private readonly TreeNode enumsRootNode;
+		private readonly TreeNode templatesRootNode;
 		private readonly TreeNode classesRootNode;
 
 		private ClassNode selectedClass;
@@ -160,7 +189,11 @@ namespace ReClassNET.Controls
 				if (selectedClass != value)
 				{
 					selectedClass = value;
-					if (selectedClass != null)
+					if (selectedClass is TemplateNode selectedTemplate)
+					{
+						projectTreeView.SelectedNode = FindTemplateTreeNode(selectedTemplate);
+					}
+					else if (selectedClass != null)
 					{
 						projectTreeView.SelectedNode = FindMainClassTreeNode(selectedClass);
 					}
@@ -219,6 +252,15 @@ namespace ReClassNET.Controls
 
 		public ContextMenuStrip EnumContextMenuStrip { get; set; }
 
+		public ContextMenuStrip TemplatesContextMenuStrip { get; set; }
+
+		public ContextMenuStrip TemplateContextMenuStrip { get; set; }
+
+		/// <summary>The selected template or null if no template is selected.</summary>
+		[Browsable(false)]
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		public TemplateNode SelectedTemplate => selectedClass as TemplateNode;
+
 		public ProjectView()
 		{
 			Contract.Ensures(classesRootNode != null);
@@ -234,6 +276,17 @@ namespace ReClassNET.Controls
 			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Class_Type);
 			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Category);
 			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Enum_Type);
+			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Custom_Type);
+
+			templatesRootNode = new TreeNode
+			{
+				Text = "Templates",
+				ImageIndex = 2,
+				SelectedImageIndex = 2,
+				Tag = -1
+			};
+
+			projectTreeView.Nodes.Add(templatesRootNode);
 
 			classesRootNode = new TreeNode
 			{
@@ -272,6 +325,13 @@ namespace ReClassNET.Controls
 					SelectedClass = classTreeNode.ClassNode;
 				}
 			}
+			else if (e.Node is TemplateTreeNode templateTreeNode)
+			{
+				if (selectedClass != templateTreeNode.Template)
+				{
+					SelectedClass = templateTreeNode.Template;
+				}
+			}
 			else if (e.Node is EnumTreeNode enumTreeNode)
 			{
 				SelectedEnum = enumTreeNode.Enum;
@@ -302,6 +362,16 @@ namespace ReClassNET.Controls
 
 				projectTreeView.SelectedNode = node;
 			}
+			else if (node == templatesRootNode)
+			{
+				cms = TemplatesContextMenuStrip;
+			}
+			else if (node is TemplateTreeNode)
+			{
+				cms = TemplateContextMenuStrip;
+
+				projectTreeView.SelectedNode = node;
+			}
 			else if (node == enumsRootNode)
 			{
 				cms = EnumsContextMenuStrip;
@@ -319,7 +389,7 @@ namespace ReClassNET.Controls
 		{
 			var isClassTreeNode = e.Node is ClassTreeNode;
 			var isEnumTreeNode = e.Node is EnumTreeNode;
-			e.CancelEdit = !isClassTreeNode && !isEnumTreeNode;
+			e.CancelEdit = !isClassTreeNode && !isEnumTreeNode && !(e.Node is TemplateTreeNode);
 		}
 
 		private void projectTreeView_AfterLabelEdit(object sender, NodeLabelEditEventArgs e)
@@ -333,6 +403,19 @@ namespace ReClassNET.Controls
 				else if (e.Node is EnumTreeNode enumTreeNode)
 				{
 					enumTreeNode.Enum.Name = e.Label;
+				}
+				else if (e.Node is TemplateTreeNode templateTreeNode)
+				{
+					// The label shows the parameter list (TArray<T>) but only the name can be changed.
+					var name = e.Label.Split('<')[0].Trim();
+					if (name.Length > 0)
+					{
+						templateTreeNode.Template.Name = name;
+					}
+
+					e.CancelEdit = true;
+
+					templateTreeNode.Update();
 				}
 			}
 		}
@@ -370,6 +453,7 @@ namespace ReClassNET.Controls
 			if (clearClasses)
 			{
 				classesRootNode.Nodes.Clear();
+				templatesRootNode.Nodes.Clear();
 			}
 
 			if (clearEnums)
@@ -407,6 +491,75 @@ namespace ReClassNET.Controls
 			projectTreeView.Sort();
 
 			projectTreeView.EndUpdate();
+		}
+
+		/// <summary>Adds the templates to the view.</summary>
+		/// <param name="templates">The templates to add.</param>
+		public void AddTemplates(IEnumerable<TemplateNode> templates)
+		{
+			Contract.Requires(templates != null);
+
+			projectTreeView.BeginUpdate();
+
+			foreach (var template in templates)
+			{
+				templatesRootNode.Nodes.Add(new TemplateTreeNode(template));
+			}
+
+			templatesRootNode.Expand();
+
+			projectTreeView.Sort();
+
+			projectTreeView.EndUpdate();
+		}
+
+		/// <summary>Adds the template to the view.</summary>
+		/// <param name="template">The template to add.</param>
+		public void AddTemplate(TemplateNode template)
+		{
+			Contract.Requires(template != null);
+
+			AddTemplates(new[] { template });
+		}
+
+		/// <summary>Removes the template from the view.</summary>
+		/// <param name="template">The template to remove.</param>
+		public void RemoveTemplate(TemplateNode template)
+		{
+			Contract.Requires(template != null);
+
+			FindTemplateTreeNode(template)?.Remove();
+
+			if (selectedClass == template)
+			{
+				SelectedClass = classesRootNode.Nodes.Cast<ClassTreeNode>().FirstOrDefault()?.ClassNode;
+			}
+		}
+
+		/// <summary>Updates the display for the given template.</summary>
+		/// <param name="template">The template to update.</param>
+		public void UpdateTemplateNode(TemplateNode template)
+		{
+			Contract.Requires(template != null);
+
+			var treeNode = FindTemplateTreeNode(template);
+			if (treeNode != null && treeNode.Text != template.DisplayName)
+			{
+				projectTreeView.BeginUpdate();
+
+				treeNode.Update();
+
+				projectTreeView.Sort();
+
+				projectTreeView.EndUpdate();
+			}
+		}
+
+		private TemplateTreeNode FindTemplateTreeNode(TemplateNode template)
+		{
+			return templatesRootNode.Nodes
+				.Cast<TemplateTreeNode>()
+				.FirstOrDefault(t => t.Template == template);
 		}
 
 		/// <summary>Removes the class from the view.</summary>

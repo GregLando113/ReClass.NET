@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
@@ -184,6 +184,20 @@ namespace ReClassNET.Nodes
 			}
 
 			return null;
+		}
+
+		/// <summary>
+		/// Tests if the node belongs to a generated class (see <see cref="TemplateInstanceClassNode"/>) and must not be changed.
+		/// Nodes of a class which is used as template argument belong to that class and can be changed.
+		/// </summary>
+		public bool IsInReadOnlyClass()
+		{
+			if (this is ClassNode classNode && classNode.IsReadOnly)
+			{
+				return true;
+			}
+
+			return GetParentClass()?.IsReadOnly ?? false;
 		}
 
 		/// <summary>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Drawing;
@@ -26,6 +26,7 @@ namespace ReClassNET.UI
 			defaultNodeTypeGroupList.Add(new[] { typeof(Utf8TextNode), typeof(Utf8TextPtrNode), typeof(Utf16TextNode), typeof(Utf16TextPtrNode) });
 			defaultNodeTypeGroupList.Add(new[] { typeof(PointerNode), typeof(ArrayNode), typeof(ArrayBufferNode), typeof(UnionNode) });
 			defaultNodeTypeGroupList.Add(new[] { typeof(ClassInstanceNode) });
+			defaultNodeTypeGroupList.Add(new[] { typeof(TemplateImplementationNode), typeof(TemplateParameterNode) });
 			defaultNodeTypeGroupList.Add(new[] { typeof(VirtualMethodTableNode), typeof(FunctionNode), typeof(FunctionPtrNode) });
 		}
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.IO;
@@ -37,6 +37,7 @@ namespace ReClassNET.DataExchange.ReClass
 					project.CustomData.Serialize(XmlCustomDataElement),
 					project.TypeMapping.Serialize(XmlTypeMappingElement),
 					new XElement(XmlEnumsElement, CreateEnumElements(project.Enums)),
+					project.Templates.Count == 0 ? null : new XElement(XmlTemplatesElement, CreateClassElements(project.Templates, logger, XmlTemplateElement)),
 					new XElement(XmlClassesElement, CreateClassElements(project.Classes, logger))
 				)
 			);
@@ -59,7 +60,7 @@ namespace ReClassNET.DataExchange.ReClass
 			));
 		}
 
-		private static IEnumerable<XElement> CreateClassElements(IEnumerable<ClassNode> classes, ILogger logger)
+		private static IEnumerable<XElement> CreateClassElements(IEnumerable<ClassNode> classes, ILogger logger, string elementName = XmlClassElement)
 		{
 			Contract.Requires(classes != null);
 			Contract.Requires(Contract.ForAll(classes, c => c != null));
@@ -67,7 +68,7 @@ namespace ReClassNET.DataExchange.ReClass
 			Contract.Ensures(Contract.Result<IEnumerable<XElement>>() != null);
 
 			return classes.Select(c => new XElement(
-				XmlClassElement,
+				elementName,
 				new XAttribute(XmlUuidAttribute, c.Uuid),
 				new XAttribute(XmlNameAttribute, c.Name ?? string.Empty),
 				new XAttribute(XmlCommentAttribute, c.Comment ?? string.Empty),
@@ -76,7 +77,7 @@ namespace ReClassNET.DataExchange.ReClass
 			));
 		}
 
-		private static XElement CreateElementFromNode(BaseNode node, ILogger logger)
+		internal static XElement CreateElementFromNode(BaseNode node, ILogger logger)
 		{
 			Contract.Requires(node != null);
 			Contract.Requires(logger != null);
@@ -115,7 +116,24 @@ namespace ReClassNET.DataExchange.ReClass
 			element.SetAttributeValue(XmlCommentAttribute, node.Comment ?? string.Empty);
 			element.SetAttributeValue(XmlHiddenAttribute, node.IsHidden);
 
-			if (node is BaseWrapperNode wrapperNode)
+			if (node is TemplateImplementationNode implementationNode)
+			{
+				// The generated class is not saved, only the template and the arguments.
+				if (implementationNode.Template != null)
+				{
+					element.SetAttributeValue(XmlReferenceAttribute, implementationNode.Template.Uuid);
+				}
+
+				foreach (var kv in implementationNode.Arguments)
+				{
+					var argumentElement = CreateElementFromNode(kv.Value, logger);
+					if (argumentElement != null)
+					{
+						element.Add(new XElement(XmlArgumentElement, new XAttribute(XmlParameterAttribute, kv.Key), argumentElement));
+					}
+				}
+			}
+			else if (node is BaseWrapperNode wrapperNode)
 			{
 				if (node is BaseClassWrapperNode classWrapperNode)
 				{
@@ -151,6 +169,11 @@ namespace ReClassNET.DataExchange.ReClass
 					{
 						element.SetAttributeValue(XmlCountFieldAttribute, arrayBufferNode.CountFieldName);
 					}
+					break;
+				}
+				case TemplateParameterNode parameterNode:
+				{
+					element.SetAttributeValue(XmlParameterAttribute, parameterNode.ParameterName);
 					break;
 				}
 				case BaseTextNode textNode:
@@ -194,6 +217,15 @@ namespace ReClassNET.DataExchange.ReClass
 				ClassNode classNode = null;
 				switch (node)
 				{
+					case TemplateImplementationNode implementationNode:
+						// The template itself must exist in the target project. Only the classes used as arguments are added.
+						foreach (var argument in implementationNode.Arguments.Values)
+						{
+							RecursiveAddClasses(argument);
+						}
+						return;
+					case TemplateInstanceClassNode _:
+						return;
 					case ClassNode c1:
 						classNode = c1;
 						break;

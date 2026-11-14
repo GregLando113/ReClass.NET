@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using ReClassNET.Controls;
 using ReClassNET.Logger;
@@ -126,7 +126,7 @@ namespace ReClassNET.Nodes
 				{
 					if (spot.Id == 0 && !IsReadOnly)
 					{
-						if (value > 0)
+						if (value > 0 && !IsInReadOnlyClass())
 						{
 							if (!StructureLayout.CanResize(this, CalculateSizeForCount(value), out var reason))
 							{

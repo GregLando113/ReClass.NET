@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.IO;
@@ -111,6 +111,29 @@ namespace ReClassNET.DataExchange.ReClass
 
 			var classes = new List<(XElement, ClassNode)>();
 
+			// Templates are filled first because classes implement them.
+			var templatesElement = document.Root.Element(XmlTemplatesElement);
+			if (templatesElement != null)
+			{
+				foreach (var element in templatesElement
+					.Elements(XmlTemplateElement)
+					.DistinctBy(e => e.Attribute(XmlUuidAttribute)?.Value))
+				{
+					var node = TemplateNode.Create();
+					node.Uuid = ParseUuid(element.Attribute(XmlUuidAttribute)?.Value);
+					node.Name = element.Attribute(XmlNameAttribute)?.Value ?? string.Empty;
+					node.Comment = element.Attribute(XmlCommentAttribute)?.Value ?? string.Empty;
+					node.AddressFormula = element.Attribute(XmlAddressAttribute)?.Value ?? string.Empty;
+
+					if (!project.ContainsTemplate(node.Uuid))
+					{
+						project.AddTemplate(node);
+
+						classes.Add((element, node));
+					}
+				}
+			}
+
 			var classesElement = document.Root.Element(XmlClassesElement);
 			if (classesElement != null)
 			{
@@ -147,7 +170,7 @@ namespace ReClassNET.DataExchange.ReClass
 			}
 		}
 
-		private BaseNode CreateNodeFromElement(XElement element, BaseNode parent, ILogger logger)
+		internal BaseNode CreateNodeFromElement(XElement element, BaseNode parent, ILogger logger)
 		{
 			Contract.Requires(element != null);
 			Contract.Requires(logger != null);
@@ -185,7 +208,54 @@ namespace ReClassNET.DataExchange.ReClass
 			node.Comment = element.Attribute(XmlCommentAttribute)?.Value ?? string.Empty;
 			node.IsHidden = bool.TryParse(element.Attribute(XmlHiddenAttribute)?.Value, out var val) && val;
 
-			if (node is BaseWrapperNode wrapperNode)
+			if (node is TemplateImplementationNode implementationNode)
+			{
+				TemplateNode template = null;
+
+				var templateReference = element.Attribute(XmlReferenceAttribute)?.Value;
+				if (templateReference != null)
+				{
+					template = project.GetTemplateByUuid(ParseUuid(templateReference));
+					if (template == null)
+					{
+						logger.Log(LogLevel.Error, $"Skipping node with unknown template reference: {templateReference}");
+						logger.Log(LogLevel.Warning, element.ToString());
+
+						return null;
+					}
+				}
+
+				var arguments = new Dictionary<string, BaseNode>();
+				foreach (var argumentElement in element.Elements(XmlArgumentElement))
+				{
+					var parameter = argumentElement.Attribute(XmlParameterAttribute)?.Value;
+					var argumentNodeElement = argumentElement.Elements(XmlNodeElement).FirstOrDefault();
+					if (parameter == null || argumentNodeElement == null)
+					{
+						continue;
+					}
+
+					// Arguments have no parent. They are only a description of the type.
+					var argument = CreateNodeFromElement(argumentNodeElement, null, logger);
+					if (argument != null)
+					{
+						arguments[parameter] = argument;
+					}
+				}
+
+				implementationNode.SetTemplate(template, arguments);
+
+				if (project.IsBulkLoading)
+				{
+					// The template may not be loaded completely.
+					implementationNode.NeedsRebuild = true;
+				}
+				else
+				{
+					implementationNode.Rebuild(project, false);
+				}
+			}
+			else if (node is BaseWrapperNode wrapperNode)
 			{
 				ClassNode GetClassNodeFromElementReference()
 				{
@@ -293,6 +363,11 @@ namespace ReClassNET.DataExchange.ReClass
 					}
 					break;
 				}
+				case TemplateParameterNode parameterNode:
+				{
+					parameterNode.ParameterName = element.Attribute(XmlParameterAttribute)?.Value ?? "T";
+					break;
+				}
 				case BaseTextNode textNode:
 				{
 					textNode.Length = (int?)element.Attribute(XmlLengthAttribute) ?? 0;
@@ -341,6 +416,7 @@ namespace ReClassNET.DataExchange.ReClass
 
 			using var project = new ReClassNetProject();
 			templateProject?.Classes.ForEach(project.AddClass);
+			templateProject?.Templates.ForEach(project.AddTemplate);
 
 			var file = new ReClassNetFile(project);
 			file.Load(input, logger);

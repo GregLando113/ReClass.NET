@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -191,14 +191,18 @@ namespace ReClassNET.CodeGenerator
 					return Enumerable.Empty<ClassNode>();
 				}
 
-				var classNodes = node.Nodes
-					.OfType<BaseContainerNode>()
-					.SelectMany(c => c.Nodes)
-					.Concat(node.Nodes)
-					.OfType<BaseWrapperNode>()
-					.Where(w => !w.IsNodePresentInChain<PointerNode>() && !w.IsNodePresentInChain<ArrayBufferNode>()) // Pointers are forward declared
-					.Select(w => w.ResolveMostInnerNode() as ClassNode)
-					.Where(n => n != null);
+				// A template has to be defined before it is used, even if it is only used behind a pointer.
+				var templateNodes = TemplateUtil.Flatten(node.Nodes, false, true)
+					.OfType<TemplateImplementationNode>()
+					.Select(i => (ClassNode)i.Template)
+					.Where(t => t != null);
+
+				// Embedded classes have to be defined first. Pointers are forward declared.
+				var classNodes = templateNodes
+					.Concat(ClassUtil.GetEmbeddedClasses(node.Nodes))
+					.Where(c => !(c is TemplateInstanceClassNode))
+					.Distinct()
+					.ToList();
 
 				return classNodes
 					.SelectMany(GetReversedClassHierarchy)
@@ -286,6 +290,12 @@ namespace ReClassNET.CodeGenerator
 			Contract.Requires(@class != null);
 			Contract.Requires(classes != null);
 
+			var templateNode = @class as TemplateNode;
+			if (templateNode != null && templateNode.Parameters.Count > 0)
+			{
+				writer.WriteLine($"template<{string.Join(", ", templateNode.Parameters.Select(p => "typename " + p))}>");
+			}
+
 			writer.Write("class ");
 			writer.Write(@class.Name);
 
@@ -295,7 +305,9 @@ namespace ReClassNET.CodeGenerator
 				skipFirstMember = true;
 
 				writer.Write(" : public ");
-				writer.Write(inheritedFromNode.InnerNode.Name);
+				writer.Write(inheritedFromNode is TemplateImplementationNode inheritedImplementation
+					? GetTemplateTypeName(inheritedImplementation, logger)
+					: inheritedFromNode.InnerNode.Name);
 			}
 
 			if (!string.IsNullOrEmpty(@class.Comment))
@@ -348,10 +360,51 @@ namespace ReClassNET.CodeGenerator
 			}
 
 			writer.Indent--;
+
+			if (templateNode != null)
+			{
+				// The size of a template depends on its arguments.
+				writer.WriteLine("};");
+
+				return;
+			}
+
 			writer.Write("}; //Size: 0x");
 			writer.WriteLine($"{@class.MemorySize:X04}");
 
 			writer.WriteLine($"static_assert(sizeof({@class.Name}) == 0x{@class.MemorySize:X});");
+		}
+
+		/// <summary>
+		/// Gets the C++ type of a template implementation, e.g. TArray&lt;class Skillbar&gt;.
+		/// </summary>
+		private string GetTemplateTypeName(TemplateImplementationNode implementation, ILogger logger)
+		{
+			var template = implementation.Template;
+			if (template == null)
+			{
+				return "void";
+			}
+
+			if (template.Parameters.Count == 0)
+			{
+				return template.Name;
+			}
+
+			string GetArgumentType(string parameter)
+			{
+				if (!implementation.Arguments.TryGetValue(parameter, out var argument))
+				{
+					return "void";
+				}
+
+				argument = TransformNode(argument);
+
+				return GetTypeDefinition(argument, logger)
+					?? (argument is BaseWrapperNode ? ResolveWrappedType(argument, true, logger) : "void");
+			}
+
+			return $"{template.Name}<{string.Join(", ", template.Parameters.Select(GetArgumentType))}>";
 		}
 
 		/// <summary>
@@ -568,6 +621,10 @@ namespace ReClassNET.CodeGenerator
 
 			switch (node)
 			{
+				case TemplateParameterNode parameterNode:
+					return parameterNode.ParameterName;
+				case TemplateImplementationNode implementationNode:
+					return GetTemplateTypeName(implementationNode, logger);
 				case ClassInstanceNode classInstanceNode:
 					return $"class {classInstanceNode.InnerNode.Name}";
 				case EnumNode enumNode:

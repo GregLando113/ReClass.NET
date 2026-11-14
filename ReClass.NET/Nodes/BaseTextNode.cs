@@ -1,4 +1,4 @@
-using System.Diagnostics.Contracts;
+﻿using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Text;
 using ReClassNET.Controls;
@@ -81,7 +81,7 @@ namespace ReClassNET.Nodes
 
 			if (spot.Id == 0)
 			{
-				if (int.TryParse(spot.Text, out var val) && val > 0)
+				if (int.TryParse(spot.Text, out var val) && val > 0 && !IsInReadOnlyClass())
 				{
 					if (!StructureLayout.CanResize(this, val * CharacterSize, out var reason))
 					{

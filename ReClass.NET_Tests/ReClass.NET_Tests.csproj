@@ -88,6 +88,7 @@
     <Compile Include="Memory\MemoryBufferTest.cs" />
     <Compile Include="Nodes\ArrayBufferNodeTest.cs" />
     <Compile Include="Nodes\StructureLayoutTest.cs" />
+    <Compile Include="Nodes\TemplateTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UI\DpiUtilTest.cs" />
     <Compile Include="Util\BitStringTest.cs" />

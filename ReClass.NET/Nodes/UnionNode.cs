@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Linq;
 using ReClassNET.Controls;
@@ -26,6 +26,8 @@ namespace ReClassNET.Nodes
 				case ClassNode _:
 				case VirtualMethodNode _:
 					return false;
+				case TemplateParameterNode _:
+					return GetParentClass()?.AllowsTemplateParameters ?? false;
 			}
 
 			return true;

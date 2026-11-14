@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
@@ -107,10 +107,36 @@ namespace ReClassNET.Forms
 			};
 			currentProject.EnumAdded += e => { projectView.AddEnum(e); };
 
+			void UpdateTemplateNode(BaseNode node)
+			{
+				projectView.UpdateTemplateNode((TemplateNode)node);
+
+				memoryViewControl.Invalidate();
+			}
+
+			currentProject.TemplateAdded += t =>
+			{
+				projectView.AddTemplate(t);
+				t.NodesChanged += UpdateTemplateNode;
+				t.NameChanged += UpdateTemplateNode;
+			};
+			currentProject.TemplateRemoved += t =>
+			{
+				projectView.RemoveTemplate(t);
+				t.NodesChanged -= UpdateTemplateNode;
+				t.NameChanged -= UpdateTemplateNode;
+			};
+
 			ClassNode.ClassCreated += currentProject.AddClass;
 
 			projectView.Clear();
 			projectView.AddEnums(currentProject.Enums);
+			projectView.AddTemplates(currentProject.Templates);
+			foreach (var template in currentProject.Templates)
+			{
+				template.NodesChanged += UpdateTemplateNode;
+				template.NameChanged += UpdateTemplateNode;
+			}
 			projectView.AddClasses(currentProject.Classes);
 			CurrentClassNode = currentProject.Classes.FirstOrDefault();
 		}
@@ -198,6 +224,11 @@ namespace ReClassNET.Forms
 		{
 			Contract.Requires(container != null);
 
+			if (IsReadOnlyNode(container))
+			{
+				return false;
+			}
+
 			bool canResize;
 			string reason;
 			switch (container)
@@ -237,6 +268,124 @@ namespace ReClassNET.Forms
 			}
 
 			return true;
+		}
+
+		/// <summary>
+		/// Tests if the node is generated from a template and can't be changed. Shows a message in this case.
+		/// </summary>
+		private static bool IsReadOnlyNode(BaseNode node)
+		{
+			if (node == null || !node.IsInReadOnlyClass())
+			{
+				return false;
+			}
+
+			MessageBox.Show(
+				"This part of the structure is generated from a template and can't be changed here. Edit the template instead.",
+				"Template",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Information
+			);
+
+			return true;
+		}
+
+		/// <summary>Adds a new template to the project and shows it.</summary>
+		private void AddNewTemplate()
+		{
+			var names = new HashSet<string>(CurrentProject.Templates.Select(t => t.Name));
+
+			var name = "Template";
+			for (var i = 2; names.Contains(name); ++i)
+			{
+				name = $"Template{i}";
+			}
+
+			var template = TemplateNode.Create();
+			template.Name = name;
+			template.AddBytes(4 * IntPtr.Size);
+
+			CurrentProject.AddTemplate(template);
+
+			CurrentClassNode = template;
+		}
+
+		/// <summary>Removes the selected template from the project if it's not used.</summary>
+		private void DeleteSelectedTemplate()
+		{
+			var template = projectView.SelectedTemplate;
+			if (template == null)
+			{
+				return;
+			}
+
+			try
+			{
+				CurrentProject.RemoveTemplate(template);
+			}
+			catch (TemplateReferencedException ex)
+			{
+				MessageBox.Show(
+					ex.Message + Environment.NewLine + string.Join(Environment.NewLine, ex.References.Select(c => c.Name)),
+					"Template",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Warning
+				);
+			}
+		}
+
+		/// <summary>
+		/// Lets the user choose the template and the arguments of the implementation and applies them
+		/// if this doesn't create a cycle and the surrounding structure has enough room.
+		/// </summary>
+		private void EditTemplateImplementation(TemplateImplementationNode implementation)
+		{
+			Contract.Requires(implementation != null);
+
+			if (CurrentProject.Templates.Count == 0)
+			{
+				MessageBox.Show(
+					"There are no templates yet. Add one with a right click on 'Templates' in the project view.",
+					"Template",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Information
+				);
+
+				return;
+			}
+
+			var parentClass = implementation.GetParentClass();
+
+			using var form = new TemplateArgumentsForm(CurrentProject, parentClass is TemplateNode, implementation.Template, implementation.Arguments);
+			if (form.ShowDialog() != DialogResult.OK)
+			{
+				return;
+			}
+
+			var template = form.SelectedTemplate;
+			var arguments = form.CreateArguments();
+
+			if (ClassUtil.IsCyclicIfTemplateIsImplemented(parentClass, template, arguments, CurrentProject.Classes))
+			{
+				MessageBox.Show("Invalid operation because this would create a class cycle.", "Cycle Detected", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+				return;
+			}
+
+			// Build the implementation separately to learn its size.
+			var probe = new TemplateImplementationNode();
+			probe.SetTemplate(template, arguments);
+			probe.Rebuild(CurrentProject, false);
+
+			if (!CanResizeNode(implementation, probe.MemorySize))
+			{
+				return;
+			}
+
+			implementation.SetTemplate(template, arguments);
+			implementation.Rebuild(CurrentProject);
+
+			memoryViewControl.Invalidate();
 		}
 
 		private static void ShowStructureLayoutConflict(string reason)
@@ -358,6 +507,11 @@ namespace ReClassNET.Forms
 
 			var selectedNodes = memoryViewControl.GetSelectedNodes();
 
+			if (IsReadOnlyNode(selectedNodes.Select(s => s.Node).FirstOrDefault(n => n.IsInReadOnlyClass())))
+			{
+				return;
+			}
+
 			var newSelected = new List<MemoryViewControl.SelectedNodeInfo>(selectedNodes.Count);
 
 			var hotSpotPartitions = selectedNodes
@@ -390,6 +544,19 @@ namespace ReClassNET.Forms
 						}
 
 						var node = BaseNode.CreateInstanceFromType(type);
+
+						if (!containerPartitions.Container.CanHandleChildNode(node))
+						{
+							node.GetUserInterfaceInfo(out var typeName, out _);
+
+							conflicts.Add(node is TemplateParameterNode
+								? "A template parameter can only be used in a template."
+								: $"'{typeName}' can't be used here.");
+
+							RemoveClassCreatedForNode(node);
+
+							continue;
+						}
 
 						// Some nodes adapt their size to the replaced node.
 						node.CopyFromNode(selected.Node);
@@ -435,7 +602,13 @@ namespace ReClassNET.Forms
 
 			if (conflicts.Count > 0)
 			{
-				ShowStructureLayoutConflict($"{conflicts.Count} node(s) were not replaced:" + Environment.NewLine + string.Join(Environment.NewLine, conflicts));
+				ShowStructureLayoutConflict($"{conflicts.Count} node(s) were not replaced:" + Environment.NewLine + string.Join(Environment.NewLine, conflicts.Distinct()));
+			}
+
+			// A new template implementation is empty until a template is chosen.
+			if (newSelected.Count == 1 && newSelected[0].Node is TemplateImplementationNode newImplementation)
+			{
+				EditTemplateImplementation(newImplementation);
 			}
 		}
 
@@ -497,7 +670,7 @@ namespace ReClassNET.Forms
 
 			var selected = selectedNodes[0];
 			var selectedNode = selected.Node;
-			if (selectedNode is ClassNode)
+			if (selectedNode is ClassNode || IsReadOnlyNode(selectedNode))
 			{
 				return;
 			}
@@ -579,6 +752,11 @@ namespace ReClassNET.Forms
 		private void RemoveSelectedNodes()
 		{
 			// Typed nodes in classes get converted back to hex nodes to keep the layout. Hex nodes get removed.
+			if (IsReadOnlyNode(memoryViewControl.GetSelectedNodes().Select(h => h.Node).FirstOrDefault(n => !(n is ClassNode) && n.IsInReadOnlyClass())))
+			{
+				return;
+			}
+
 			var nodesByContainer = memoryViewControl.GetSelectedNodes()
 				.Select(h => h.Node)
 				.WhereNot(n => n is ClassNode)

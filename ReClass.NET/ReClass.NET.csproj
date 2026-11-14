@@ -290,7 +290,15 @@
     <Compile Include="Nodes\BoolNode.cs" />
     <Compile Include="Nodes\ArrayBufferNode.cs" />
     <Compile Include="Nodes\ClassUtil.cs" />
+    <Compile Include="Forms\TemplateArgumentsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Nodes\StructureLayout.cs" />
+    <Compile Include="Nodes\TemplateImplementationNode.cs" />
+    <Compile Include="Nodes\TemplateInstanceClassNode.cs" />
+    <Compile Include="Nodes\TemplateNode.cs" />
+    <Compile Include="Nodes\TemplateParameterNode.cs" />
+    <Compile Include="Nodes\TemplateUtil.cs" />
     <Compile Include="Nodes\EnumNode.cs" />
     <Compile Include="Nodes\FunctionNode.cs" />
     <Compile Include="Nodes\NIntNode.cs" />

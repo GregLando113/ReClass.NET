@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Linq;
@@ -24,6 +24,12 @@ namespace ReClassNET.Nodes
 		public override int MemorySize => Nodes.Sum(n => n.MemorySize);
 
 		protected override bool ShouldCompensateSizeChanges => true;
+
+		/// <summary>True if the nodes of the class are generated and must not be edited (see <see cref="TemplateInstanceClassNode"/>).</summary>
+		public virtual bool IsReadOnly => false;
+
+		/// <summary>True if the class can contain <see cref="TemplateParameterNode"/> placeholders.</summary>
+		public virtual bool AllowsTemplateParameters => false;
 
 		public Guid Uuid { get; set; }
 
@@ -65,6 +71,8 @@ namespace ReClassNET.Nodes
 				case ClassNode _:
 				case VirtualMethodNode _:
 					return false;
+				case TemplateParameterNode _:
+					return AllowsTemplateParameters;
 			}
 
 			return true;

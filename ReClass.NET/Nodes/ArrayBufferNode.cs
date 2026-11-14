@@ -244,6 +244,11 @@ namespace ReClassNET.Nodes
 
 		public override void Update(HotSpot spot)
 		{
+			if (spot.Id == 0 && IsInReadOnlyClass())
+			{
+				return;
+			}
+
 			var isNumber = int.TryParse(spot.Text, out var number);
 
 			if (spot.Id == 0 && !IsReadOnly && !isNumber)

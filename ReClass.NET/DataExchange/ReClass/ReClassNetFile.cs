@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -75,6 +75,8 @@ namespace ReClassNET.DataExchange.ReClass
 			typeof(VirtualMethodTableNode),
 			typeof(ArrayNode),
 			typeof(ArrayBufferNode),
+			typeof(TemplateParameterNode),
+			typeof(TemplateImplementationNode),
 			typeof(PointerNode),
 			typeof(UnionNode)
 		}.ToDictionary(t => t.Name, t => t);

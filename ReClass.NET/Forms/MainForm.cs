@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics.Contracts;
 using System.IO;
@@ -107,6 +107,14 @@ namespace ReClassNET.Forms
 
 			toolStrip.Items.AddRange(NodeTypesBuilder.CreateToolStripButtons(ReplaceSelectedNodesWithType).ToArray());
 			changeTypeToolStripMenuItem.DropDownItems.AddRange(NodeTypesBuilder.CreateToolStripMenuItems(ReplaceSelectedNodesWithType, false).ToArray());
+
+			var templatesContextMenuStrip = new ContextMenuStrip();
+			templatesContextMenuStrip.Items.Add("Add new template", Properties.Resources.B16x16_Button_Class_Add, (s, e2) => AddNewTemplate());
+			projectView.TemplatesContextMenuStrip = templatesContextMenuStrip;
+
+			var templateContextMenuStrip = new ContextMenuStrip();
+			templateContextMenuStrip.Items.Add("Delete template", Properties.Resources.B16x16_Button_Class_Remove, (s, e2) => DeleteSelectedTemplate());
+			projectView.TemplateContextMenuStrip = templateContextMenuStrip;
 
 			var createDefaultProject = true;
 
@@ -555,7 +563,7 @@ namespace ReClassNET.Forms
 
 			if (selectedNodes.Count > 0 && !(selectedNodes[0].Node is ClassNode))
 			{
-				if (selectedNodes[0].Node.GetParentContainer() is ClassNode parentNode)
+				if (selectedNodes[0].Node.GetParentContainer() is ClassNode parentNode && !IsReadOnlyNode(parentNode))
 				{
 					// The total size doesn't change, so batch the update to keep the layout stable in between.
 					parentNode.BeginUpdate();
@@ -579,7 +587,7 @@ namespace ReClassNET.Forms
 
 		private void dissectNodesToolStripMenuItem_Click(object sender, EventArgs e)
 		{
-			var hexNodes = memoryViewControl.GetSelectedNodes().Where(h => h.Node is BaseHexNode).ToList();
+			var hexNodes = memoryViewControl.GetSelectedNodes().Where(h => h.Node is BaseHexNode && !h.Node.IsInReadOnlyClass()).ToList();
 			if (!hexNodes.Any())
 			{
 				return;
@@ -740,7 +748,7 @@ namespace ReClassNET.Forms
 		private void shrinkClassToolStripMenuItem_Click(object sender, EventArgs e)
 		{
 			var node = memoryViewControl.GetSelectedNodes().Select(s => s.Node).FirstOrDefault();
-			if (!(node is ClassNode classNode))
+			if (!(node is ClassNode classNode) || IsReadOnlyNode(classNode))
 			{
 				return;
 			}
@@ -842,11 +850,24 @@ namespace ReClassNET.Forms
 			insertBytesToolStripDropDownButton.Enabled = selectedNodes.Count == 1 && parentContainer != null && !isContainerNode;
 
 			var enabled = selectedNodes.Count > 0 && !nodeIsClass;
-			toolStrip.Items.OfType<TypeToolStripButton>().ForEach(b => b.Enabled = enabled);
+			var parameterEnabled = enabled && (node.GetParentClass()?.AllowsTemplateParameters ?? false);
+			toolStrip.Items.OfType<TypeToolStripButton>().ForEach(b => b.Enabled = b.Value == typeof(TemplateParameterNode) ? parameterEnabled : enabled);
 		}
 
 		private void memoryViewControl_ChangeClassTypeClick(object sender, NodeClickEventArgs e)
 		{
+			if (IsReadOnlyNode(e.Node))
+			{
+				return;
+			}
+
+			if (e.Node is TemplateImplementationNode implementationNode)
+			{
+				EditTemplateImplementation(implementationNode);
+
+				return;
+			}
+
 			var classes = CurrentProject.Classes.OrderBy(c => c.Name);
 
 			if (e.Node is FunctionNode functionNode)
@@ -893,10 +914,17 @@ namespace ReClassNET.Forms
 
 		private void memoryViewControl_ChangeWrappedTypeClick(object sender, NodeClickEventArgs e)
 		{
-			if (e.Node is BaseWrapperNode wrapperNode)
+			if (e.Node is BaseWrapperNode wrapperNode && !IsReadOnlyNode(e.Node))
 			{
 				var items = NodeTypesBuilder.CreateToolStripMenuItems(t =>
 				{
+					if (t == typeof(TemplateParameterNode) && !(wrapperNode.GetParentClass()?.AllowsTemplateParameters ?? false))
+					{
+						ShowStructureLayoutConflict("A template parameter can only be used in a template.");
+
+						return;
+					}
+
 					var node = t == null ? null : BaseNode.CreateInstanceFromType(t);
 					if (wrapperNode.CanChangeInnerNodeTo(node))
 					{
@@ -908,6 +936,11 @@ namespace ReClassNET.Forms
 						}
 
 						wrapperNode.ChangeInnerNode(node);
+
+						if (node is TemplateImplementationNode newImplementation)
+						{
+							EditTemplateImplementation(newImplementation);
+						}
 					}
 				}, wrapperNode.CanChangeInnerNodeTo(null));
 
@@ -919,7 +952,7 @@ namespace ReClassNET.Forms
 
 		private void memoryViewControl_ChangeEnumTypeClick(object sender, NodeClickEventArgs e)
 		{
-			if (e.Node is EnumNode enumNode)
+			if (e.Node is EnumNode enumNode && !IsReadOnlyNode(e.Node))
 			{
 				using var csf = new EnumSelectionForm(CurrentProject);
 
