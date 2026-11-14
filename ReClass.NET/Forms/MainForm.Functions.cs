@@ -664,6 +664,32 @@ namespace ReClassNET.Forms
 			}
 		}
 
+		/// <summary>
+		/// Copies a Markdown readout of the selected nodes with their current values to the clipboard.
+		/// </summary>
+		private void CopySelectedNodesReadoutToClipboard()
+		{
+			var selectedNodes = memoryViewControl.GetSelectedNodes();
+			if (selectedNodes.Count == 0)
+			{
+				return;
+			}
+
+			try
+			{
+				var text = NodeReadout.CreateMarkdown(
+					selectedNodes.Select(s => new NodeReadout.Item(s.Node, s.Memory, s.Address)),
+					Program.RemoteProcess
+				);
+
+				Clipboard.SetText(text);
+			}
+			catch (Exception ex)
+			{
+				Program.Logger.Log(ex);
+			}
+		}
+
 		private void PasteNodeFromClipboardToSelection()
 		{
 			var (classNodes, nodes) = ReClassClipboard.Paste(CurrentProject, Program.Logger);

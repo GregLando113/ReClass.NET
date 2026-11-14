@@ -293,6 +293,7 @@
     <Compile Include="Forms\TemplateArgumentsForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Nodes\NodeReadout.cs" />
     <Compile Include="Nodes\StructureLayout.cs" />
     <Compile Include="Nodes\TemplateImplementationNode.cs" />
     <Compile Include="Nodes\TemplateInstanceClassNode.cs" />

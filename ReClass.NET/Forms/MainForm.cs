@@ -108,6 +108,12 @@ namespace ReClassNET.Forms
 			toolStrip.Items.AddRange(NodeTypesBuilder.CreateToolStripButtons(ReplaceSelectedNodesWithType).ToArray());
 			changeTypeToolStripMenuItem.DropDownItems.AddRange(NodeTypesBuilder.CreateToolStripMenuItems(ReplaceSelectedNodesWithType, false).ToArray());
 
+			var copyReadoutToolStripMenuItem = new ToolStripMenuItem("Copy Readout (Markdown)", Properties.Resources.B16x16_Page_Copy, (s, e2) => CopySelectedNodesReadoutToClipboard())
+			{
+				ShortcutKeyDisplayString = "Ctrl+Shift+C"
+			};
+			selectedNodeContextMenuStrip.Items.Insert(selectedNodeContextMenuStrip.Items.IndexOf(copyNodeToolStripMenuItem) + 1, copyReadoutToolStripMenuItem);
+
 			var templatesContextMenuStrip = new ContextMenuStrip();
 			templatesContextMenuStrip.Items.Add("Add new template", Properties.Resources.B16x16_Button_Class_Add, (s, e2) => AddNewTemplate());
 			projectView.TemplatesContextMenuStrip = templatesContextMenuStrip;
@@ -815,6 +821,9 @@ namespace ReClassNET.Forms
 		{
 			switch (args.KeyCode)
 			{
+				case Keys.C when args.Control && args.Shift:
+					CopySelectedNodesReadoutToClipboard();
+					break;
 				case Keys.C when args.Control:
 					CopySelectedNodesToClipboard();
 					break;

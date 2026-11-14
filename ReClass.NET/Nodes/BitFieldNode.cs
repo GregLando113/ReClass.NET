@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using ReClassNET.Controls;
@@ -91,7 +91,7 @@ namespace ReClassNET.Nodes
 		/// <summary>Converts the memory value to a bit string.</summary>
 		/// <param name="memory">The process memory.</param>
 		/// <returns>The value converted to a bit string.</returns>
-		private string ConvertValueToBitString(MemoryBuffer memory)
+		internal string ConvertValueToBitString(MemoryBuffer memory)
 		{
 			Contract.Requires(memory != null);
 			Contract.Ensures(Contract.Result<string>() != null);

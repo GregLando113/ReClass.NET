@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Text;
@@ -31,7 +31,7 @@ namespace ReClassNET.Nodes
 			GetParentContainer()?.ChildHasChanged(this);
 		}
 
-		private string GetTextRepresentation(MemoryBuffer memory)
+		internal string GetTextRepresentation(MemoryBuffer memory)
 		{
 			return Enum.UseFlagsMode ? GetFlagsStringRepresentation(memory) : GetStringRepresentation(memory);
 		}

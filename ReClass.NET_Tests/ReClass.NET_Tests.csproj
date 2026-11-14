@@ -87,6 +87,7 @@
     <Compile Include="MemoryScanner\Comparer\IntegerMemoryComparerTest.cs" />
     <Compile Include="Memory\MemoryBufferTest.cs" />
     <Compile Include="Nodes\ArrayBufferNodeTest.cs" />
+    <Compile Include="Nodes\NodeReadoutTest.cs" />
     <Compile Include="Nodes\StructureLayoutTest.cs" />
     <Compile Include="Nodes\TemplateTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
