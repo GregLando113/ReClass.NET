@@ -365,9 +365,22 @@ namespace ReClassNET.Forms
 			var template = form.SelectedTemplate;
 			var arguments = form.CreateArguments();
 
-			if (ClassUtil.IsCyclicIfTemplateIsImplemented(parentClass, template, arguments, CurrentProject.Classes))
+			// Behind a pointer nothing is embedded, so a template can point to itself (TLink<T>* in TLink<T>).
+			if (!implementation.IsBehindPointer && ClassUtil.IsCyclicIfTemplateIsImplemented(parentClass, template, arguments, CurrentProject.Classes))
 			{
 				MessageBox.Show("Invalid operation because this would create a class cycle.", "Cycle Detected", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+				return;
+			}
+
+			if (implementation.IsBehindPointer)
+			{
+				// The size of the surrounding structure doesn't change. The nodes are generated when the pointer is opened.
+				implementation.SetTemplate(template, arguments);
+				implementation.RebuildLater(CurrentProject);
+				implementation.GetParentContainer()?.ChildHasChanged(implementation);
+
+				memoryViewControl.Invalidate();
 
 				return;
 			}
@@ -711,6 +724,19 @@ namespace ReClassNET.Forms
 			if (nodesToPaste.Count == 0)
 			{
 				return;
+			}
+
+			// The pasted nodes were loaded with a temporary project. Generate the template implementations with the real one.
+			foreach (var implementation in TemplateUtil.Flatten(nodesToPaste, false, false).OfType<TemplateImplementationNode>().ToList())
+			{
+				if (implementation.IsBehindPointer)
+				{
+					implementation.RebuildLater(CurrentProject);
+				}
+				else
+				{
+					implementation.Rebuild(CurrentProject, false);
+				}
 			}
 
 			// Pasting follows the replacement rules: the pasted nodes replace the selected node and

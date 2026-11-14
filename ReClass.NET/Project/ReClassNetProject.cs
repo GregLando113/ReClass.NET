@@ -109,7 +109,8 @@ namespace ReClassNET.Project
 				templates.ForEach(t => t.UpdateParameters());
 
 				// The templates may not have been complete when their implementations were loaded.
-				foreach (var implementation in TemplateUtil.EnumerateImplementations(ClassesAndTemplates, false).Where(i => i.NeedsRebuild).ToList())
+				// Implementations behind a pointer stay postponed until they are used.
+				foreach (var implementation in TemplateUtil.EnumerateImplementations(ClassesAndTemplates, false).Where(i => i.NeedsRebuild && !i.IsBehindPointer).ToList())
 				{
 					implementation.Rebuild(this, false);
 				}
@@ -200,7 +201,14 @@ namespace ReClassNET.Project
 
 			foreach (var implementation in implementations)
 			{
-				implementation.Rebuild(this, false);
+				if (implementation.IsBehindPointer)
+				{
+					implementation.RebuildLater(this);
+				}
+				else
+				{
+					implementation.Rebuild(this, false);
+				}
 			}
 
 			foreach (var parentTemplate in implementations.Select(i => i.GetParentClass()).OfType<TemplateNode>().Distinct().ToList())

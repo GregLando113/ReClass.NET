@@ -245,10 +245,10 @@ namespace ReClassNET.DataExchange.ReClass
 
 				implementationNode.SetTemplate(template, arguments);
 
-				if (project.IsBulkLoading)
+				if (project.IsBulkLoading || implementationNode.IsBehindPointer)
 				{
-					// The template may not be loaded completely.
-					implementationNode.NeedsRebuild = true;
+					// The template may not be loaded completely. Implementations behind a pointer are generated on first use.
+					implementationNode.RebuildLater(project);
 				}
 				else
 				{

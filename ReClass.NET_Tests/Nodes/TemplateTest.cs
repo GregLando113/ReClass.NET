@@ -377,5 +377,108 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(code).Contains("public readonly TBox_UInt8 box;");
 			Check.That(code).Contains("public struct TBox_UInt8");
 		}
+
+		/// <summary>TLink&lt;T&gt; { TLink&lt;T&gt;* m_prevLink; T* m_nextNode; }</summary>
+		private TemplateNode CreateLinkTemplate()
+		{
+			var template = CreateTemplate("TLink");
+
+			var prevLink = new TemplateImplementationNode();
+			prevLink.SetTemplate(template, new[] { new KeyValuePair<string, BaseNode>("T", Parameter("T")) });
+
+			template.AddNodes(new BaseNode[] { Wrap<PointerNode>(prevLink, "m_prevLink"), Wrap<PointerNode>(Parameter("T"), "m_nextNode") });
+
+			return template;
+		}
+
+		[Fact]
+		public void TemplateCanPointToItselfAndToItsParameter()
+		{
+			var linkTemplate = CreateLinkTemplate();
+			var node = CreateClass("Node", new Int32Node { Name = "id" });
+
+			Check.That(linkTemplate.Parameters).ContainsExactly("T");
+			Check.That(linkTemplate.MemorySize).IsEqualTo(2 * IntPtr.Size);
+
+			var link = Implement(linkTemplate, ("T", Instance(node)));
+			node.AddNode(link);
+
+			Check.That(link.TypeName).IsEqualTo("TLink<Node>");
+			Check.That(link.MemorySize).IsEqualTo(2 * IntPtr.Size);
+
+			var nextNode = (PointerNode)link.InstanceClass.Nodes[1];
+			Check.That(nextNode.Name).IsEqualTo("m_nextNode");
+			Check.That(((ClassInstanceNode)nextNode.InnerNode).InnerNode).IsSameReferenceAs(node);
+
+			// The link behind the pointer is only generated when it is used.
+			var prevLink = (TemplateImplementationNode)((PointerNode)link.InstanceClass.Nodes[0]).InnerNode;
+			Check.That(prevLink.IsBehindPointer).IsTrue();
+			Check.That(prevLink.TypeName).IsEqualTo("TLink<Node>");
+			Check.That(prevLink.InstanceClass.Nodes.Count).IsEqualTo(0);
+			Check.That(prevLink.MemorySize).IsEqualTo(2 * IntPtr.Size);
+			Check.That(prevLink.InstanceClass.Nodes.Count).IsEqualTo(2);
+
+			var prevPrevLink = (TemplateImplementationNode)((PointerNode)prevLink.InstanceClass.Nodes[0]).InnerNode;
+			Check.That(prevPrevLink.InstanceClass.Nodes.Count).IsEqualTo(0);
+
+			// A change of the template reaches the generated links.
+			linkTemplate.AddBytes(4);
+			Check.That(link.MemorySize).IsEqualTo(2 * IntPtr.Size + 4);
+			prevLink = (TemplateImplementationNode)((PointerNode)link.InstanceClass.Nodes[0]).InnerNode;
+			Check.That(prevLink.MemorySize).IsEqualTo(2 * IntPtr.Size + 4);
+		}
+
+		[Fact]
+		public void ListTemplateEmbedsLinkOfItsParameter()
+		{
+			var linkTemplate = CreateLinkTemplate();
+
+			var term = new TemplateImplementationNode { Name = "m_term" };
+			term.SetTemplate(linkTemplate, new[] { new KeyValuePair<string, BaseNode>("T", Parameter("T")) });
+			var listTemplate = CreateTemplate("TList", new UInt32Node { Name = "m_linkOffset" }, term);
+			term.Rebuild(project);
+
+			var node = CreateClass("Node", new Int32Node { Name = "id" });
+			var arguments = new[] { new KeyValuePair<string, BaseNode>("T", Instance(node)) };
+
+			// The list only points to its nodes, so a node can contain a list of nodes.
+			Check.That(ClassUtil.IsCyclicIfTemplateIsImplemented(node, listTemplate, arguments, project.Classes)).IsFalse();
+
+			var list = Implement(listTemplate, ("T", Instance(node)));
+			node.AddNode(list);
+
+			Check.That(list.TypeName).IsEqualTo("TList<Node>");
+			Check.That(list.MemorySize).IsEqualTo(4 + 2 * IntPtr.Size);
+			var listTerm = (TemplateImplementationNode)list.InstanceClass.Nodes[1];
+			Check.That(listTerm.TypeName).IsEqualTo("TLink<Node>");
+			Check.That(listTerm.InstanceClass.Nodes.Count).IsEqualTo(2);
+
+			byte[] data;
+			using (var output = new MemoryStream())
+			{
+				new ReClassNetFile(project).Save(output, new NullLogger());
+				data = output.ToArray();
+			}
+
+			var loadedProject = new ReClassNetProject();
+			using (var input = new MemoryStream(data))
+			{
+				new ReClassNetFile(loadedProject).Load(input, new NullLogger());
+			}
+
+			var loadedNode = loadedProject.Classes[0];
+			Check.That(loadedNode.MemorySize).IsEqualTo(node.MemorySize);
+			var loadedList = (TemplateImplementationNode)loadedNode.Nodes[1];
+			Check.That(loadedList.TypeName).IsEqualTo("TList<Node>");
+			var loadedTerm = (TemplateImplementationNode)loadedList.InstanceClass.Nodes[1];
+			var loadedPrev = (TemplateImplementationNode)((PointerNode)loadedTerm.InstanceClass.Nodes[0]).InnerNode;
+			Check.That(loadedPrev.MemorySize).IsEqualTo(2 * IntPtr.Size);
+
+			var code = new CppCodeGenerator(loadedProject.TypeMapping).GenerateCode(loadedProject.Classes, Array.Empty<EnumDescription>(), new NullLogger());
+			Check.That(code).Contains("TLink<T> *m_prevLink;");
+			Check.That(code).Contains("T *m_nextNode;");
+			Check.That(code).Contains("TLink<T> m_term;");
+			Check.That(code).Contains("TList<class Node>");
+		}
 	}
 }

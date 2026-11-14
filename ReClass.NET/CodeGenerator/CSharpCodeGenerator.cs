@@ -110,7 +110,9 @@ namespace ReClassNET.CodeGenerator
 			var implementations = TemplateUtil.EnumerateImplementations(classesToWrite, true)
 				.Where(i => i.Template != null)
 				.GroupBy(i => i.TypeName)
-				.Select(g => g.First());
+				.Select(g => g.First())
+				.ToList();
+			implementations.ForEach(i => i.EnsureBuilt());
 			foreach (var implementation in implementations)
 			{
 				iw.WriteLine();

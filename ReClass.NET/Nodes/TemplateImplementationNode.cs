@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Drawing;
+using ReClassNET.Controls;
 using ReClassNET.Project;
 
 namespace ReClassNET.Nodes
@@ -21,8 +22,74 @@ namespace ReClassNET.Nodes
 		/// <summary>The generated class.</summary>
 		public TemplateInstanceClassNode InstanceClass => (TemplateInstanceClassNode)InnerNode;
 
-		/// <summary>True if the node was loaded but its nodes were not generated yet.</summary>
-		internal bool NeedsRebuild { get; set; }
+		/// <summary>True if the nodes of the generated class were not generated yet.</summary>
+		internal bool NeedsRebuild { get; private set; }
+
+		private ReClassNetProject pendingProject;
+
+		/// <summary>
+		/// True if the implementation is the target of a pointer or array buffer and is not embedded in its class.
+		/// </summary>
+		public bool IsBehindPointer
+		{
+			get
+			{
+				for (var parent = ParentNode; parent is BaseWrapperNode; parent = parent.ParentNode)
+				{
+					if (parent is PointerNode || parent is ArrayBufferNode)
+					{
+						return true;
+					}
+				}
+
+				return false;
+			}
+		}
+
+		public override int MemorySize
+		{
+			get
+			{
+				EnsureBuilt();
+
+				return base.MemorySize;
+			}
+		}
+
+		/// <summary>
+		/// Marks the node to be generated later: at the end of a bulk load or, for implementations behind a pointer,
+		/// when they are used for the first time. This is what allows a template to point to itself
+		/// (TLink&lt;T&gt; { TLink&lt;T&gt;* prev; }) without generating an endless chain.
+		/// </summary>
+		internal void RebuildLater(ReClassNetProject project)
+		{
+			pendingProject = project;
+
+			NeedsRebuild = true;
+		}
+
+		/// <summary>Generates the nodes if this was postponed by <see cref="RebuildLater"/>.</summary>
+		internal void EnsureBuilt()
+		{
+			if (NeedsRebuild && pendingProject != null && !pendingProject.IsBulkLoading)
+			{
+				Rebuild(pendingProject, false);
+			}
+		}
+
+		public override Size Draw(DrawContext context, int x, int y)
+		{
+			EnsureBuilt();
+
+			return base.Draw(context, x, y);
+		}
+
+		public override int CalculateDrawnHeight(DrawContext context)
+		{
+			EnsureBuilt();
+
+			return base.CalculateDrawnHeight(context);
+		}
 
 		/// <summary>The name of the implemented type, e.g. TArray&lt;Skillbar&gt;.</summary>
 		public string TypeName => TemplateUtil.GetTypeName(this);
@@ -81,6 +148,7 @@ namespace ReClassNET.Nodes
 		public void Rebuild(ReClassNetProject project, bool notifyParent = true)
 		{
 			NeedsRebuild = false;
+			pendingProject = null;
 
 			InstanceClass.SetNodes(TemplateInstantiator.CreateNodes(this, project));
 
