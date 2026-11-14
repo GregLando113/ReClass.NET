@@ -179,18 +179,9 @@ namespace ReClassNET.CodeGenerator
 				}
 			}
 
-			var alreadySeen = new HashSet<ClassNode>();
-
-			IEnumerable<ClassNode> GetReversedClassHierarchy(ClassNode node)
+			// The classes and templates which have to be defined before the class.
+			static List<ClassNode> GetRequiredClasses(ClassNode node)
 			{
-				Contract.Requires(node != null);
-				Contract.Ensures(Contract.Result<IEnumerable<ClassNode>>() != null);
-
-				if (!alreadySeen.Add(node))
-				{
-					return Enumerable.Empty<ClassNode>();
-				}
-
 				// A template has to be defined before it is used, even if it is only used behind a pointer.
 				var templateNodes = TemplateUtil.Flatten(node.Nodes, false, true)
 					.OfType<TemplateImplementationNode>()
@@ -198,21 +189,57 @@ namespace ReClassNET.CodeGenerator
 					.Where(t => t != null);
 
 				// Embedded classes have to be defined first. Pointers are forward declared.
-				var classNodes = templateNodes
+				return templateNodes
 					.Concat(ClassUtil.GetEmbeddedClasses(node.Nodes))
 					.Where(c => !(c is TemplateInstanceClassNode))
 					.Distinct()
 					.ToList();
-
-				return classNodes
-					.SelectMany(GetReversedClassHierarchy)
-					.Append(node);
 			}
 
-			var classesToWrite = classes
-				.Where(c => c.Nodes.None(n => n is FunctionNode)) // Skip class which contains FunctionNodes because these are not data classes.
-				.SelectMany(GetReversedClassHierarchy) // Order the classes by their use hierarchy.
-				.Distinct();
+			// The classes used as template argument (TArray<Skillbar>) belong to the class too. If the template only points to
+			// them they don't need to be defined first, so they can't be allowed to break the order of the required classes.
+			static List<ClassNode> GetRequiredAndArgumentClasses(ClassNode node)
+			{
+				return GetRequiredClasses(node)
+					.Concat(TemplateUtil.GetArgumentClasses(node.Nodes))
+					.Distinct()
+					.ToList();
+			}
+
+			static List<ClassNode> OrderByDependencies(IEnumerable<ClassNode> roots, Func<ClassNode, List<ClassNode>> getDependencies)
+			{
+				var alreadySeen = new HashSet<ClassNode>();
+				var ordered = new List<ClassNode>();
+
+				void Visit(ClassNode node)
+				{
+					if (!alreadySeen.Add(node))
+					{
+						return;
+					}
+
+					getDependencies(node).ForEach(Visit);
+
+					ordered.Add(node);
+				}
+
+				foreach (var root in roots)
+				{
+					Visit(root);
+				}
+
+				return ordered;
+			}
+
+			// First collect everything to write with the argument classes in front of their users where possible,
+			// then order by the classes which really have to be defined first.
+			var classesToWrite = OrderByDependencies(
+				OrderByDependencies(
+					classes.Where(c => c.Nodes.None(n => n is FunctionNode)), // Skip class which contains FunctionNodes because these are not data classes.
+					GetRequiredAndArgumentClasses
+				),
+				GetRequiredClasses
+			);
 
 			using (var en = classesToWrite.GetEnumerator())
 			{

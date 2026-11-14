@@ -505,5 +505,72 @@ namespace ReClass.NET_Tests.Nodes
 			node.AddBytes(8);
 			Check.That(node.MemorySize).IsEqualTo(size + 8);
 		}
+
+		[Fact]
+		public void CppCodeContainsTheClassesUsedAsTemplateArgument()
+		{
+			var localProject = new ReClassNetProject();
+
+			ClassNode AddClass(string name)
+			{
+				var classNode = ClassNode.Create();
+				classNode.Name = name;
+				localProject.AddClass(classNode);
+				classNode.AddBytes(4);
+				return classNode;
+			}
+
+			ClassInstanceNode InstanceOf(ClassNode classNode)
+			{
+				var instance = new ClassInstanceNode();
+				instance.ChangeInnerNode(classNode);
+				return instance;
+			}
+
+			// TBuf<T> { T* data; UInt32 len; } only points to its argument.
+			var template = TemplateNode.Create();
+			template.Name = "TBuf";
+			localProject.AddTemplate(template);
+			var buffer = new ArrayBufferNode { Name = "data" };
+			buffer.ChangeInnerNode(new TemplateParameterNode());
+			template.AddNode(buffer);
+			template.AddNode(new UInt32Node { Name = "len" });
+
+			TemplateImplementationNode Implement(string name, BaseNode argument)
+			{
+				var implementation = new TemplateImplementationNode { Name = name };
+				implementation.SetTemplate(template, new Dictionary<string, BaseNode> { ["T"] = argument });
+				return implementation;
+			}
+
+			var skill = AddClass("Skill");
+			var item = AddClass("Item");
+			var unused = AddClass("Unused");
+			var owner = AddClass("Owner");
+			var user = AddClass("User");
+
+			user.AddNode(Implement("skills", InstanceOf(skill)));
+			user.AddNode(Implement("nested", Implement("inner", InstanceOf(item))));
+			// Owner embeds User and User has a TBuf<Owner>: Owner still has to be defined after User.
+			user.AddNode(Implement("owners", InstanceOf(owner)));
+			owner.AddNode(InstanceOf(user));
+			foreach (var implementation in user.Nodes.OfType<TemplateImplementationNode>().ToList())
+			{
+				implementation.Rebuild(localProject);
+			}
+
+			var code = new CppCodeGenerator(localProject.TypeMapping).GenerateCode(new[] { user }, Array.Empty<EnumDescription>(), new NullLogger());
+
+			int Position(string name) => code.IndexOf("class " + name + Environment.NewLine, StringComparison.Ordinal);
+
+			Check.That(code).Contains("template<typename T>");
+			Check.That(Position("Skill")).IsStrictlyGreaterThan(-1);
+			Check.That(Position("Item")).IsStrictlyGreaterThan(-1);
+			Check.That(Position("Owner")).IsStrictlyGreaterThan(-1);
+			Check.That(code).DoesNotContain("class Unused");
+			Check.That(Position("Skill")).IsStrictlyLessThan(Position("User"));
+			Check.That(Position("Item")).IsStrictlyLessThan(Position("User"));
+			Check.That(Position("User")).IsStrictlyLessThan(Position("Owner"));
+		}
 	}
 }

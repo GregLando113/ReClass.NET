@@ -179,6 +179,36 @@ namespace ReClassNET.Nodes
 			return result;
 		}
 
+		/// <summary>
+		/// Gets the classes which are used as argument of the template implementations in the nodes, e.g. Skillbar for TArray&lt;Skillbar&gt;
+		/// and TArray&lt;TArray&lt;Skillbar&gt;&gt;. Implementations behind a pointer are included, arguments which are a pointer (Skillbar*) are not.
+		/// </summary>
+		public static IEnumerable<ClassNode> GetArgumentClasses(IEnumerable<BaseNode> nodes)
+		{
+			IEnumerable<ClassNode> Walk(BaseNode argument)
+			{
+				switch (argument)
+				{
+					case null:
+					case PointerNode _:
+					case ArrayBufferNode _:
+						return Enumerable.Empty<ClassNode>();
+					case TemplateImplementationNode implementationNode:
+						return implementationNode.Arguments.Values.SelectMany(Walk);
+					case BaseWrapperNode wrapperNode:
+						return wrapperNode.InnerNode is ClassNode classNode ? new[] { classNode } : Walk(wrapperNode.InnerNode);
+				}
+
+				return Enumerable.Empty<ClassNode>();
+			}
+
+			return Flatten(nodes, false, false)
+				.OfType<TemplateImplementationNode>()
+				.SelectMany(Walk)
+				.Where(c => !(c is TemplateInstanceClassNode))
+				.Distinct();
+		}
+
 		/// <summary>Tests if the class is referenced by the nodes (as class instance, pointer target or template argument).</summary>
 		public static bool ReferencesClass(IEnumerable<BaseNode> nodes, ClassNode classNode)
 		{
