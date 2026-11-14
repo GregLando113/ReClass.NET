@@ -375,6 +375,8 @@ namespace ReClassNET.Forms
 
 			if (implementation.IsBehindPointer)
 			{
+				CreateNewClassesForArguments(arguments);
+
 				// The size of the surrounding structure doesn't change. The nodes are generated when the pointer is opened.
 				implementation.SetTemplate(template, arguments);
 				implementation.RebuildLater(CurrentProject);
@@ -395,10 +397,45 @@ namespace ReClassNET.Forms
 				return;
 			}
 
+			CreateNewClassesForArguments(arguments);
+
 			implementation.SetTemplate(template, arguments);
 			implementation.Rebuild(CurrentProject);
 
 			memoryViewControl.Invalidate();
+		}
+
+		/// <summary>
+		/// Creates the classes for all arguments which were set to "&lt;new&gt;" in the <see cref="TemplateArgumentsForm"/>
+		/// and replaces the placeholders with them. Called once the arguments are accepted, so a cancelled or refused
+		/// change leaves no unused classes behind.
+		/// </summary>
+		private void CreateNewClassesForArguments(IReadOnlyDictionary<string, BaseNode> arguments)
+		{
+			var created = new Dictionary<ClassNode, ClassNode>();
+
+			var instances = TemplateUtil.Flatten(arguments.Values, false, true)
+				.OfType<ClassInstanceNode>()
+				.Where(i => !(i is TemplateImplementationNode))
+				.ToList();
+			foreach (var instance in instances)
+			{
+				if (!(instance.InnerNode is ClassNode placeholder) || !TemplateArgumentsForm.IsNewClassPlaceholder(placeholder, CurrentProject))
+				{
+					continue;
+				}
+
+				if (!created.TryGetValue(placeholder, out var classNode))
+				{
+					// The class gets added to the project by its creation.
+					classNode = ClassNode.Create();
+					classNode.Initialize();
+
+					created.Add(placeholder, classNode);
+				}
+
+				instance.ChangeInnerNode(classNode);
+			}
 		}
 
 		private static void ShowStructureLayoutConflict(string reason)

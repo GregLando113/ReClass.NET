@@ -54,6 +54,33 @@ namespace ReClassNET.Forms
 			public TemplateNode NestedTemplate { get; set; }
 			public Dictionary<string, BaseNode> NestedArguments { get; set; } = new Dictionary<string, BaseNode>();
 			public BaseNode CustomNode { get; set; }
+
+			/// <summary>The placeholder for a class which gets created when the arguments are applied.</summary>
+			public ClassNode NewClass { get; set; }
+		}
+
+		/// <summary>The text of the entry which creates a new class.</summary>
+		public const string NewClassText = "<new>";
+
+		/// <summary>
+		/// Creates a placeholder for a class which doesn't exist yet. It is not part of the project.
+		/// <see cref="IsNewClassPlaceholder"/> identifies it when the arguments are applied.
+		/// </summary>
+		private static ClassNode CreateNewClassPlaceholder()
+		{
+			var classNode = new ClassNode(false) { Name = NewClassText };
+			classNode.Initialize();
+			return classNode;
+		}
+
+		/// <summary>Tests if the class is a placeholder for a class the user wants to have created.</summary>
+		public static bool IsNewClassPlaceholder(ClassNode classNode, ReClassNetProject project)
+		{
+			return classNode != null
+				&& !(classNode is TemplateNode)
+				&& !(classNode is TemplateInstanceClassNode)
+				&& classNode.Name == NewClassText
+				&& !project.ContainsClass(classNode.Uuid);
 		}
 
 		private static readonly Type[] primitiveTypes =
@@ -263,6 +290,10 @@ namespace ReClassNET.Forms
 				case ClassInstanceNode instanceNode when instanceNode.InnerNode is ClassNode classNode && !(classNode is TemplateInstanceClassNode):
 					selected = FindKind(row, ArgumentKind.Class);
 					targetClass = classNode;
+					if (IsNewClassPlaceholder(classNode, project))
+					{
+						row.NewClass = classNode;
+					}
 					break;
 				default:
 					selected = row.KindComboBox.Items.Cast<KindItem>().FirstOrDefault(i => i.Kind == ArgumentKind.Primitive && i.NodeType == inner.GetType());
@@ -282,7 +313,8 @@ namespace ReClassNET.Forms
 
 			if (targetClass != null)
 			{
-				row.TargetComboBox.SelectedItem = row.TargetComboBox.Items.Cast<NamedItem<ClassNode>>().FirstOrDefault(i => i.Value == targetClass);
+				row.TargetComboBox.SelectedItem = row.TargetComboBox.Items.Cast<NamedItem<ClassNode>>().FirstOrDefault(i => i.Value == targetClass)
+					?? row.TargetComboBox.Items[0]; // <new>
 			}
 			else if (targetText != null)
 			{
@@ -342,23 +374,30 @@ namespace ReClassNET.Forms
 			{
 				case ArgumentKind.Class:
 				{
-					var selectedClass = (row.TargetComboBox.SelectedItem as NamedItem<ClassNode>)?.Value;
+					var selectedItem = row.TargetComboBox.SelectedItem as NamedItem<ClassNode>;
+					var selectedClass = selectedItem?.Value;
 
 					row.TargetComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
 					row.TargetComboBox.Items.Clear();
+
+					// The first entry creates a new class when the arguments are applied.
+					row.TargetComboBox.Items.Add(new NamedItem<ClassNode> { Value = null, Text = NewClassText });
+
 					foreach (var c in project.Classes.OrderBy(c => c.Name))
 					{
 						row.TargetComboBox.Items.Add(new NamedItem<ClassNode> { Value = c, Text = c.Name });
 					}
 
-					var item = row.TargetComboBox.Items.Cast<NamedItem<ClassNode>>().FirstOrDefault(i => i.Value == selectedClass);
+					// Keep the previous choice (<new> has no class).
+					var item = selectedItem == null ? null : row.TargetComboBox.Items.Cast<NamedItem<ClassNode>>().FirstOrDefault(i => i.Value == selectedClass);
 					if (item != null)
 					{
 						row.TargetComboBox.SelectedItem = item;
 					}
-					else if (row.TargetComboBox.Items.Count > 0)
+					else
 					{
-						row.TargetComboBox.SelectedIndex = 0;
+						// Default to the first existing class. Without classes only <new> is left.
+						row.TargetComboBox.SelectedIndex = row.TargetComboBox.Items.Count > 1 ? 1 : 0;
 					}
 					break;
 				}
@@ -402,10 +441,17 @@ namespace ReClassNET.Forms
 					return new PointerNode();
 				case ArgumentKind.Class:
 				{
-					var classNode = (row.TargetComboBox.SelectedItem as NamedItem<ClassNode>)?.Value;
-					if (classNode == null)
+					var classItem = row.TargetComboBox.SelectedItem as NamedItem<ClassNode>;
+					if (classItem == null)
 					{
 						return null;
+					}
+
+					var classNode = classItem.Value;
+					if (classNode == null)
+					{
+						// <new>: use a placeholder. The class is created when the arguments are applied.
+						classNode = row.NewClass ?? (row.NewClass = CreateNewClassPlaceholder());
 					}
 
 					var instanceNode = new ClassInstanceNode();
