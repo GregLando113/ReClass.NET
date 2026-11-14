@@ -73,6 +73,7 @@ namespace ReClassNET.DataExchange.ReClass
 				new XAttribute(XmlNameAttribute, c.Name ?? string.Empty),
 				new XAttribute(XmlCommentAttribute, c.Comment ?? string.Empty),
 				new XAttribute(XmlAddressAttribute, c.AddressFormula ?? string.Empty),
+				c.IsPinned ? new XAttribute(XmlPinnedAttribute, true) : null,
 				c.Nodes.Select(n => CreateElementFromNode(n, logger)).Where(e => e != null)
 			));
 		}

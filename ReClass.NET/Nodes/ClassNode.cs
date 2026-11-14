@@ -35,6 +35,9 @@ namespace ReClassNET.Nodes
 
 		public string AddressFormula { get; set; } = DefaultAddressFormula;
 
+		/// <summary>True if the class is also listed in the pinned category of the project view.</summary>
+		public bool IsPinned { get; set; }
+
 		public event NodeEventHandler NodesChanged;
 
 		internal ClassNode(bool notifyClassCreated)

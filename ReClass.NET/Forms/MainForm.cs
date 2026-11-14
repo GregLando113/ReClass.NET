@@ -114,6 +114,19 @@ namespace ReClassNET.Forms
 			};
 			selectedNodeContextMenuStrip.Items.Insert(selectedNodeContextMenuStrip.Items.IndexOf(copyNodeToolStripMenuItem) + 1, copyReadoutToolStripMenuItem);
 
+			var pinClassToolStripMenuItem = new ToolStripMenuItem("Pin class", null, (s, e2) =>
+			{
+				var classNode = projectView.SelectedClass;
+				if (classNode != null && !(classNode is TemplateNode))
+				{
+					classNode.IsPinned = !classNode.IsPinned;
+
+					projectView.UpdatePinnedClass(classNode);
+				}
+			});
+			projectClassContextMenuStrip.Items.Insert(0, pinClassToolStripMenuItem);
+			projectClassContextMenuStrip.Opening += (s, e2) => pinClassToolStripMenuItem.Text = projectView.SelectedClass?.IsPinned == true ? "Unpin class" : "Pin class";
+
 			var templatesContextMenuStrip = new ContextMenuStrip();
 			templatesContextMenuStrip.Items.Add("Add new template", Properties.Resources.B16x16_Button_Class_Add, (s, e2) => AddNewTemplate());
 			projectView.TemplatesContextMenuStrip = templatesContextMenuStrip;

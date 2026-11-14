@@ -29,6 +29,7 @@
 		public const string XmlCommentAttribute = "comment";
 		public const string XmlHiddenAttribute = "hidden";
 		public const string XmlAddressAttribute = "address";
+		public const string XmlPinnedAttribute = "pinned";
 		public const string XmlTypeAttribute = "type";
 		public const string XmlReferenceAttribute = "reference";
 		public const string XmlCountAttribute = "count";

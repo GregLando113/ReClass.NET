@@ -146,7 +146,8 @@ namespace ReClassNET.DataExchange.ReClass
 						Uuid = ParseUuid(element.Attribute(XmlUuidAttribute)?.Value),
 						Name = element.Attribute(XmlNameAttribute)?.Value ?? string.Empty,
 						Comment = element.Attribute(XmlCommentAttribute)?.Value ?? string.Empty,
-						AddressFormula = element.Attribute(XmlAddressAttribute)?.Value ?? string.Empty
+						AddressFormula = element.Attribute(XmlAddressAttribute)?.Value ?? string.Empty,
+						IsPinned = (bool?)element.Attribute(XmlPinnedAttribute) ?? false
 					};
 
 					if (!project.ContainsClass(node.Uuid))

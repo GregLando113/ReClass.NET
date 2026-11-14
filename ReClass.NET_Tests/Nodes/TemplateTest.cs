@@ -572,5 +572,34 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(Position("Item")).IsStrictlyLessThan(Position("User"));
 			Check.That(Position("User")).IsStrictlyLessThan(Position("Owner"));
 		}
+
+		[Fact]
+		public void PinnedClassesAreSaved()
+		{
+			var localProject = new ReClassNetProject();
+			var pinned = ClassNode.Create();
+			pinned.Name = "Pinned";
+			pinned.IsPinned = true;
+			localProject.AddClass(pinned);
+			var other = ClassNode.Create();
+			other.Name = "Other";
+			localProject.AddClass(other);
+
+			byte[] data;
+			using (var stream = new MemoryStream())
+			{
+				new ReClassNetFile(localProject).Save(stream, new NullLogger());
+				data = stream.ToArray();
+			}
+
+			var loadedProject = new ReClassNetProject();
+			using (var stream = new MemoryStream(data))
+			{
+				new ReClassNetFile(loadedProject).Load(stream, new NullLogger());
+			}
+
+			Check.That(loadedProject.Classes.Single(c => c.Name == "Pinned").IsPinned).IsTrue();
+			Check.That(loadedProject.Classes.Single(c => c.Name == "Other").IsPinned).IsFalse();
+		}
 	}
 }

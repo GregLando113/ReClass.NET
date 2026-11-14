@@ -167,6 +167,7 @@ namespace ReClassNET.Controls
 			}
 		}
 
+		private readonly TreeNode pinnedRootNode;
 		private readonly TreeNode enumsRootNode;
 		private readonly TreeNode templatesRootNode;
 		private readonly TreeNode classesRootNode;
@@ -193,7 +194,7 @@ namespace ReClassNET.Controls
 					{
 						projectTreeView.SelectedNode = FindTemplateTreeNode(selectedTemplate);
 					}
-					else if (selectedClass != null)
+					else if (selectedClass != null && (projectTreeView.SelectedNode as ClassTreeNode)?.ClassNode != selectedClass)
 					{
 						projectTreeView.SelectedNode = FindMainClassTreeNode(selectedClass);
 					}
@@ -238,6 +239,7 @@ namespace ReClassNET.Controls
 					var classes = classesRootNode.Nodes.Cast<ClassTreeNode>().Select(t => t.ClassNode).ToList();
 
 					classesRootNode.Nodes.Clear();
+					pinnedRootNode.Nodes.Clear();
 
 					AddClasses(classes);
 				}
@@ -277,6 +279,15 @@ namespace ReClassNET.Controls
 			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Category);
 			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Enum_Type);
 			projectTreeView.ImageList.Images.Add(Properties.Resources.B16x16_Custom_Type);
+
+			// Only part of the tree while a class is pinned.
+			pinnedRootNode = new TreeNode
+			{
+				Text = "Pinned",
+				ImageIndex = 2,
+				SelectedImageIndex = 2,
+				Tag = -2
+			};
 
 			templatesRootNode = new TreeNode
 			{
@@ -454,6 +465,9 @@ namespace ReClassNET.Controls
 			{
 				classesRootNode.Nodes.Clear();
 				templatesRootNode.Nodes.Clear();
+				pinnedRootNode.Nodes.Clear();
+
+				UpdatePinnedRootNode();
 			}
 
 			if (clearEnums)
@@ -484,7 +498,14 @@ namespace ReClassNET.Controls
 			foreach (var @class in classes)
 			{
 				classesRootNode.Nodes.Add(new ClassTreeNode(@class, this));
+
+				if (@class.IsPinned)
+				{
+					pinnedRootNode.Nodes.Add(new ClassTreeNode(@class, this));
+				}
 			}
+
+			UpdatePinnedRootNode();
 
 			classesRootNode.Expand();
 
@@ -568,10 +589,12 @@ namespace ReClassNET.Controls
 		{
 			Contract.Requires(node != null);
 
-			foreach (var tn in FindClassTreeNodes(node))
+			foreach (var tn in FindClassTreeNodes(node).ToList())
 			{
 				tn.Remove();
 			}
+
+			UpdatePinnedRootNode();
 
 			if (selectedClass == node)
 			{
@@ -607,6 +630,7 @@ namespace ReClassNET.Controls
 
 			return classesRootNode.Nodes
 				.Cast<ClassTreeNode>()
+				.Concat(pinnedRootNode.Nodes.Cast<ClassTreeNode>())
 				.Traverse(t => t.Nodes.Cast<ClassTreeNode>())
 				.Where(n => n.ClassNode == node);
 		}
@@ -629,6 +653,66 @@ namespace ReClassNET.Controls
 			projectTreeView.Sort();
 
 			projectTreeView.EndUpdate();
+		}
+
+		/// <summary>
+		/// Shows the class in the pinned category if <see cref="ClassNode.IsPinned"/> is set and removes it from there otherwise.
+		/// </summary>
+		/// <param name="class">The class to update.</param>
+		public void UpdatePinnedClass(ClassNode @class)
+		{
+			Contract.Requires(@class != null);
+
+			var treeNode = pinnedRootNode.Nodes
+				.Cast<ClassTreeNode>()
+				.FirstOrDefault(t => t.ClassNode == @class);
+
+			if (@class.IsPinned == (treeNode != null))
+			{
+				return;
+			}
+
+			projectTreeView.BeginUpdate();
+
+			if (treeNode != null)
+			{
+				// Don't let the tree view move the selection to a neighbour of the removed node.
+				if (projectTreeView.SelectedNode == treeNode || treeNode.Nodes.Cast<TreeNode>().Traverse(t => t.Nodes.Cast<TreeNode>()).Contains(projectTreeView.SelectedNode))
+				{
+					projectTreeView.SelectedNode = FindMainClassTreeNode(@class);
+				}
+
+				treeNode.Remove();
+			}
+			else
+			{
+				pinnedRootNode.Nodes.Add(new ClassTreeNode(@class, this));
+			}
+
+			UpdatePinnedRootNode();
+
+			projectTreeView.Sort();
+
+			projectTreeView.EndUpdate();
+		}
+
+		/// <summary>Shows the pinned category while it contains classes.</summary>
+		private void UpdatePinnedRootNode()
+		{
+			var isShown = pinnedRootNode.TreeView != null;
+			if (pinnedRootNode.Nodes.Count > 0)
+			{
+				if (!isShown)
+				{
+					projectTreeView.Nodes.Insert(0, pinnedRootNode);
+				}
+
+				pinnedRootNode.Expand();
+			}
+			else if (isShown)
+			{
+				pinnedRootNode.Remove();
+			}
 		}
 
 		/// <summary>Adds the enum to the view.</summary>
