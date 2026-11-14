@@ -286,6 +286,11 @@ namespace ReClassNET.DataExchange.ReClass
 				case BaseWrapperArrayNode arrayNode:
 				{
 					arrayNode.Count = (int?)element.Attribute(XmlCountAttribute) ?? 0;
+					if (arrayNode is ArrayBufferNode arrayBufferNode)
+					{
+						// Resolved lazily because the field may not be loaded yet.
+						arrayBufferNode.CountFieldName = element.Attribute(XmlCountFieldAttribute)?.Value;
+					}
 					break;
 				}
 				case BaseTextNode textNode:

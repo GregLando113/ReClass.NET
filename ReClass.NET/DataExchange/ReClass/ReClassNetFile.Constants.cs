@@ -32,6 +32,7 @@
 		public const string XmlTypeAttribute = "type";
 		public const string XmlReferenceAttribute = "reference";
 		public const string XmlCountAttribute = "count";
+		public const string XmlCountFieldAttribute = "countField";
 		public const string XmlBitsAttribute = "bits";
 		public const string XmlLengthAttribute = "length";
 		public const string XmlSizeAttribute = "size";

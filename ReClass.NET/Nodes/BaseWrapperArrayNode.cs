@@ -31,7 +31,18 @@ namespace ReClassNET.Nodes
 			return true;
 		}
 
-		protected Size Draw(DrawContext context, int x, int y, string type)
+		/// <summary>Calculates the size of this node if it had <paramref name="count"/> elements.</summary>
+		/// <param name="count">The number of elements.</param>
+		/// <returns>The size in bytes.</returns>
+		protected virtual int CalculateSizeForCount(int count) => InnerNode.MemorySize * count;
+
+		/// <summary>Gets the text displayed (and edited) for the element count.</summary>
+		protected virtual string GetCountText() => Count.ToString();
+
+		/// <summary>Gets the value text displayed in the header after the index navigation.</summary>
+		protected virtual string GetValueText(DrawContext context) => $"<Size={MemorySize}>";
+
+		protected Size Draw(DrawContext context, int x, int y, string type, Image icon = null)
 		{
 			if (IsHidden && !IsWrapped)
 			{
@@ -43,7 +54,7 @@ namespace ReClassNET.Nodes
 			AddSelection(context, x, y, context.Font.Height);
 
 			x = AddOpenCloseIcon(context, x, y);
-			x = AddIcon(context, x, y, context.IconProvider.Array, HotSpot.NoneId, HotSpotType.None);
+			x = AddIcon(context, x, y, icon ?? context.IconProvider.Array, HotSpot.NoneId, HotSpotType.None);
 
 			var tx = x;
 			x = AddAddressOffset(context, x, y);
@@ -54,7 +65,7 @@ namespace ReClassNET.Nodes
 				x = AddText(context, x, y, context.Settings.NameColor, HotSpot.NameId, Name);
 			}
 			x = AddText(context, x, y, context.Settings.IndexColor, HotSpot.NoneId, "[");
-			x = AddText(context, x, y, context.Settings.IndexColor, IsReadOnly ? HotSpot.NoneId : 0, Count.ToString());
+			x = AddText(context, x, y, context.Settings.IndexColor, IsReadOnly ? HotSpot.NoneId : 0, GetCountText());
 			x = AddText(context, x, y, context.Settings.IndexColor, HotSpot.NoneId, "]");
 
 			x = AddIcon(context, x, y, context.IconProvider.LeftArrow, 2, HotSpotType.Click);
@@ -63,7 +74,7 @@ namespace ReClassNET.Nodes
 			x = AddText(context, x, y, context.Settings.IndexColor, HotSpot.NoneId, ")");
 			x = AddIcon(context, x, y, context.IconProvider.RightArrow, 3, HotSpotType.Click) + context.Font.Width;
 
-			x = AddText(context, x, y, context.Settings.ValueColor, HotSpot.NoneId, $"<Size={MemorySize}>") + context.Font.Width;
+			x = AddText(context, x, y, context.Settings.ValueColor, HotSpot.NoneId, GetValueText(context)) + context.Font.Width;
 			x = AddIcon(context, x + 2, y, context.IconProvider.Change, 4, HotSpotType.ChangeWrappedType);
 
 			x += context.Font.Width;
@@ -117,7 +128,7 @@ namespace ReClassNET.Nodes
 					{
 						if (value > 0)
 						{
-							if (!StructureLayout.CanResize(this, InnerNode.MemorySize * value, out var reason))
+							if (!StructureLayout.CanResize(this, CalculateSizeForCount(value), out var reason))
 							{
 								Program.Logger.Log(LogLevel.Warning, reason);
 

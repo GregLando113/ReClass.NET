@@ -288,6 +288,7 @@
     <Compile Include="Nodes\BaseWrapperArrayNode.cs" />
     <Compile Include="Nodes\BaseWrapperNode.cs" />
     <Compile Include="Nodes\BoolNode.cs" />
+    <Compile Include="Nodes\ArrayBufferNode.cs" />
     <Compile Include="Nodes\ClassUtil.cs" />
     <Compile Include="Nodes\StructureLayout.cs" />
     <Compile Include="Nodes\EnumNode.cs" />

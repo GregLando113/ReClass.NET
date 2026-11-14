@@ -147,6 +147,10 @@ namespace ReClassNET.DataExchange.ReClass
 				case BaseWrapperArrayNode arrayNode:
 				{
 					element.SetAttributeValue(XmlCountAttribute, arrayNode.Count);
+					if (arrayNode is ArrayBufferNode arrayBufferNode && arrayBufferNode.CountFieldName != null)
+					{
+						element.SetAttributeValue(XmlCountFieldAttribute, arrayBufferNode.CountFieldName);
+					}
 					break;
 				}
 				case BaseTextNode textNode:

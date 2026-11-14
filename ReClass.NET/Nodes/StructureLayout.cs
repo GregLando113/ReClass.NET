@@ -149,6 +149,7 @@ namespace ReClassNET.Nodes
 				switch (node)
 				{
 					case PointerNode _:
+					case ArrayBufferNode _: // Pointers don't embed the memory of their target.
 					case ClassNode _: // Other classes get visited separately.
 						break;
 					case BaseContainerNode containerNode:

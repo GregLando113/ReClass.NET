@@ -34,6 +34,7 @@ namespace ReClassNET.CodeGenerator
 			[typeof(Utf16TextPtrNode)] = "IntPtr",
 			[typeof(Utf32TextPtrNode)] = "IntPtr",
 			[typeof(PointerNode)] = "IntPtr",
+			[typeof(ArrayBufferNode)] = "IntPtr",
 			[typeof(VirtualMethodTableNode)] = "IntPtr",
 
 			[typeof(Vector2Node)] = "Vector2",

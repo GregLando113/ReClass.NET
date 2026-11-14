@@ -196,7 +196,7 @@ namespace ReClassNET.CodeGenerator
 					.SelectMany(c => c.Nodes)
 					.Concat(node.Nodes)
 					.OfType<BaseWrapperNode>()
-					.Where(w => !w.IsNodePresentInChain<PointerNode>()) // Pointers are forward declared
+					.Where(w => !w.IsNodePresentInChain<PointerNode>() && !w.IsNodePresentInChain<ArrayBufferNode>()) // Pointers are forward declared
 					.Select(w => w.ResolveMostInnerNode() as ClassNode)
 					.Where(n => n != null);
 
@@ -617,6 +617,14 @@ namespace ReClassNET.CodeGenerator
 
 					lastWrapperNode = pointerNode;
 					currentNode = pointerNode.InnerNode;
+				}
+				else if (currentNode is ArrayBufferNode arrayBufferNode)
+				{
+					// A buffer is a plain pointer to its elements (T* data).
+					sb.Prepend('*');
+
+					lastWrapperNode = arrayBufferNode;
+					currentNode = arrayBufferNode.InnerNode;
 				}
 				else if (currentNode is ArrayNode arrayNode)
 				{

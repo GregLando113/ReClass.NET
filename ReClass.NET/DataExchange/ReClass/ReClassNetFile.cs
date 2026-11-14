@@ -74,6 +74,7 @@ namespace ReClassNET.DataExchange.ReClass
 			typeof(Vector4Node),
 			typeof(VirtualMethodTableNode),
 			typeof(ArrayNode),
+			typeof(ArrayBufferNode),
 			typeof(PointerNode),
 			typeof(UnionNode)
 		}.ToDictionary(t => t.Name, t => t);
