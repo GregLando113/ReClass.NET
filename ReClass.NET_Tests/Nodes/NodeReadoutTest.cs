@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using NFluent;
+using ReClassNET.DataExchange.ReClass;
+using ReClassNET.Logger;
 using ReClassNET.Memory;
 using ReClassNET.Nodes;
 using ReClassNET.Project;
@@ -227,6 +230,27 @@ namespace ReClass.NET_Tests.Nodes
 			var text = NodeReadout.CreateMarkdown(new[] { new NodeReadout.Item(classNode, memory, (IntPtr)0x1000) }, null);
 
 			Check.That(text).Contains("| a\\|b | 1 |");
+		}
+
+		[Fact]
+		public void CopyingNodesKeepsTheirClass()
+		{
+			var classNode = CreateClass("Player", new Int32Node { Name = "id" }, new Int32Node { Name = "level" });
+			var memory = CreateMemory(BitConverter.GetBytes(1), BitConverter.GetBytes(2));
+			var level = classNode.Nodes[1];
+
+			using (var stream = new MemoryStream())
+			{
+				ReClassNetFile.SerializeNodesToStream(stream, new[] { level }, new NullLogger());
+			}
+
+			Check.That(level.ParentNode).IsSameReferenceAs(classNode);
+			Check.That(level.GetParentContainer()).IsSameReferenceAs(classNode);
+			Check.That(level.Offset).IsEqualTo(4);
+
+			var text = NodeReadout.CreateMarkdown(new[] { new NodeReadout.Item(level, memory, (IntPtr)0x1004) }, null);
+
+			Check.That(Lines(text)[0]).StartsWith("## Player @ 0x");
 		}
 	}
 }

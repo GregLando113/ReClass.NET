@@ -254,6 +254,9 @@ namespace ReClassNET.DataExchange.ReClass
 
 			var needsSerialisationClass = true;
 
+			// Adding a node to the serialisation class makes that class its parent. Remember the real parents to restore them.
+			var originalParents = new List<KeyValuePair<BaseNode, BaseNode>>();
+
 			foreach (var node in nodes)
 			{
 				RecursiveAddClasses(node);
@@ -267,12 +270,30 @@ namespace ReClassNET.DataExchange.ReClass
 						project.AddClass(serialisationClass);
 					}
 
+					originalParents.Add(new KeyValuePair<BaseNode, BaseNode>(node, node.ParentNode));
+
 					serialisationClass.AddNode(node);
 				}
 			}
 
-			var file = new ReClassNetFile(project);
-			file.Save(output, logger);
+			try
+			{
+				var file = new ReClassNetFile(project);
+				file.Save(output, logger);
+			}
+			finally
+			{
+				// The nodes still belong to their classes.
+				foreach (var kv in originalParents)
+				{
+					kv.Key.ParentNode = kv.Value;
+				}
+
+				foreach (var parentContainer in originalParents.Select(kv => kv.Key.GetParentContainer()).Where(c => c != null).Distinct())
+				{
+					parentContainer.UpdateOffsets();
+				}
+			}
 		}
 	}
 }
