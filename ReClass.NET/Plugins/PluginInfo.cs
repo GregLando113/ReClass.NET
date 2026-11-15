@@ -40,7 +40,7 @@ namespace ReClassNET.Plugins
 			Contract.Requires(versionInfo != null);
 
 			FilePath = filePath;
-			IsNative = versionInfo.ProductName == null /* Unix */ || versionInfo.ProductName == PluginNativeName;
+			IsNative = versionInfo.ProductName == PluginNativeName;
 
 			FileVersion = (versionInfo.FileVersion ?? string.Empty).Trim();
 

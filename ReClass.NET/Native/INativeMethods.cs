@@ -19,8 +19,6 @@ namespace ReClassNET.Native
 
 		string UndecorateSymbolName(string name);
 
-		void SetProcessDpiAwareness();
-
 		bool RegisterExtension(string fileExtension, string extensionId, string applicationPath, string applicationName);
 
 		void UnregisterExtension(string fileExtension, string extensionId);
@@ -65,11 +63,6 @@ namespace ReClassNET.Native
 			Contract.Requires(name != null);
 			Contract.Ensures(Contract.Result<string>() != null);
 
-			throw new NotImplementedException();
-		}
-
-		public void SetProcessDpiAwareness()
-		{
 			throw new NotImplementedException();
 		}
 

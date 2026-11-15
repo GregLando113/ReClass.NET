@@ -73,20 +73,6 @@ namespace ReClassNET.Native
 		[DllImport("dbghelp.dll", CharSet = CharSet.Unicode)]
 		private static extern int UnDecorateSymbolName(string DecoratedName, StringBuilder UnDecoratedName, int UndecoratedLength, int Flags);
 
-		[DllImport("user32.dll")]
-		[return: MarshalAs(UnmanagedType.Bool)]
-		private static extern bool SetProcessDPIAware();
-
-		private enum ProcessDpiAwareness : uint
-		{
-			Unaware = 0,
-			SystemAware = 1,
-			PerMonitorAware = 2
-		}
-
-		[DllImport("shcore.dll")]
-		private static extern int SetProcessDpiAwareness([MarshalAs(UnmanagedType.U4)] ProcessDpiAwareness a);
-
 		[DllImport("shell32.dll")]
 		private static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
@@ -157,18 +143,6 @@ namespace ReClassNET.Native
 				return sb.ToString();
 			}
 			return name;
-		}
-
-		public void SetProcessDpiAwareness()
-		{
-			if (WinUtil.IsAtLeastWindows10)
-			{
-				SetProcessDpiAwareness(ProcessDpiAwareness.SystemAware);
-			}
-			else if (WinUtil.IsAtLeastWindowsVista)
-			{
-				SetProcessDPIAware();
-			}
 		}
 
 		public bool RegisterExtension(string fileExtension, string extensionId, string applicationPath, string applicationName)

@@ -41,16 +41,8 @@ namespace ReClassNET.Forms
 			SetColorBindings();
 			SetTypeDefinitionBindings();
 
-			if (NativeMethods.IsUnix())
-			{
-				fileAssociationGroupBox.Enabled = false;
-				runAsAdminCheckBox.Enabled = false;
-			}
-			else
-			{
-				NativeMethodsWindows.SetButtonShield(createAssociationButton, true);
-				NativeMethodsWindows.SetButtonShield(removeAssociationButton, true);
-			}
+			NativeMethodsWindows.SetButtonShield(createAssociationButton, true);
+			NativeMethodsWindows.SetButtonShield(removeAssociationButton, true);
 		}
 
 		protected override void OnLoad(EventArgs e)

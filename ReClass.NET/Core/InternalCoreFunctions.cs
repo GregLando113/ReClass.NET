@@ -12,8 +12,7 @@ namespace ReClassNET.Core
 
 	internal class InternalCoreFunctions : NativeCoreWrapper, IInternalCoreFunctions, IDisposable
 	{
-		private const string CoreFunctionsModuleWindows = "NativeCore.dll";
-		private const string CoreFunctionsModuleUnix = "NativeCore.so";
+		private const string CoreFunctionsModule = "NativeCore.dll";
 
 		private readonly IntPtr handle;
 
@@ -46,8 +45,7 @@ namespace ReClassNET.Core
 
 		public static InternalCoreFunctions Create()
 		{
-			var libraryName = NativeMethods.IsUnix() ? CoreFunctionsModuleUnix : CoreFunctionsModuleWindows;
-			var libraryPath = Path.Combine(PathUtil.ExecutableFolderPath, libraryName);
+			var libraryPath = Path.Combine(PathUtil.ExecutableFolderPath, CoreFunctionsModule);
 
 			var handle = NativeMethods.LoadLibrary(libraryPath);
 			if (handle.IsNull())

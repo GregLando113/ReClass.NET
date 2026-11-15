@@ -26,7 +26,6 @@
     <Compile Include="..\ReClass.NET\DataExchange\ReClass\ReClassNetFile.Constants.cs" Link="DataExchange\ReClass\ReClassNetFile.Constants.cs" />
     <Compile Include="..\ReClass.NET\Native\INativeMethods.cs" Link="Native\INativeMethods.cs" />
     <Compile Include="..\ReClass.NET\Native\NativeMethods.cs" Link="Native\NativeMethods.cs" />
-    <Compile Include="..\ReClass.NET\Native\NativeMethods.Unix.cs" Link="Native\NativeMethods.Unix.cs" />
     <Compile Include="..\ReClass.NET\Native\NativeMethods.Windows.cs" Link="Native\NativeMethods.Windows.cs" />
     <Compile Include="..\ReClass.NET\Extensions\IntPtrExtensions.cs" Link="Extensions\IntPtrExtensions.cs" />
     <Compile Include="..\ReClass.NET\Util\PathUtil.cs" Link="Util\PathUtil.cs" />

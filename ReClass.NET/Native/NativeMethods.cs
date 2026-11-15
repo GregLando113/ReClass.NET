@@ -6,49 +6,7 @@ namespace ReClassNET.Native
 {
 	public static class NativeMethods
 	{
-		private static readonly INativeMethods nativeMethods;
-
-		static NativeMethods()
-		{
-			if (IsUnix())
-			{
-				nativeMethods = new NativeMethodsUnix();
-			}
-			else
-			{
-				nativeMethods = new NativeMethodsWindows();
-			}
-		}
-
-		private static bool? isUnix;
-		public static bool IsUnix()
-		{
-			if (isUnix.HasValue)
-			{
-				return isUnix.Value;
-			}
-
-			var p = GetPlatformId();
-
-			isUnix = (p == PlatformID.Unix) || (p == PlatformID.MacOSX) || ((int)p == 128);
-
-			return isUnix.Value;
-		}
-
-		private static PlatformID? plattformId;
-		public static PlatformID GetPlatformId()
-		{
-			if (plattformId.HasValue)
-			{
-				return plattformId.Value;
-			}
-
-			plattformId = Environment.OSVersion.Platform;
-
-			// TODO: Mono returns PlatformID.Unix on Mac OS X
-
-			return plattformId.Value;
-		}
+		private static readonly INativeMethods nativeMethods = new NativeMethodsWindows();
 
 		public static IntPtr LoadLibrary(string name)
 		{
@@ -87,11 +45,6 @@ namespace ReClassNET.Native
 			Contract.Ensures(Contract.Result<string>() != null);
 
 			return nativeMethods.UndecorateSymbolName(name);
-		}
-
-		public static void SetProcessDpiAwareness()
-		{
-			nativeMethods.SetProcessDpiAwareness();
 		}
 
 		public static bool RegisterExtension(string fileExtension, string extensionId, string applicationPath, string applicationName)

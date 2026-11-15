@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using ReClassNET.Memory;
-using ReClassNET.Native;
 using ReClassNET.UI;
 
 namespace ReClassNET.Forms
@@ -32,12 +31,6 @@ namespace ReClassNET.Forms
 			InitializeComponent();
 
 			processDataGridView.AutoGenerateColumns = false;
-
-			// TODO: Workaround, Mono can't display a DataGridViewImageColumn.
-			if (NativeMethods.IsUnix())
-			{
-				iconColumn.Visible = false;
-			}
 
 			previousProcessLinkLabel.Text = string.IsNullOrEmpty(previousProcess) ? NoPreviousProcess : previousProcess;
 

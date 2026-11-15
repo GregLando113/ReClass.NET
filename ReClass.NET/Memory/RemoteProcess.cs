@@ -446,9 +446,7 @@ namespace ReClassNET.Memory
 					sections.Clear();
 				}
 
-				// TODO: Mono doesn't support Task.CompletedTask at the moment.
-				//return Task.CompletedTask;
-				return Task.FromResult(true);
+				return Task.CompletedTask;
 			}
 
 			return Task.Run(() =>
