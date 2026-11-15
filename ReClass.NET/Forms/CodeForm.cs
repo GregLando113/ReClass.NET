@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using System.IO;
-using System.Linq;
-using System.Text;
+using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 using ColorCode;
 using ColorCode.Parsing;
+using ColorCode.Styling;
 using ReClassNET.CodeGenerator;
 using ReClassNET.Extensions;
 using ReClassNET.Logger;
@@ -31,19 +31,10 @@ namespace ReClassNET.Forms
 
 			var code = generator.GenerateCode(classes, enums, logger);
 
-			var buffer = new StringBuilder(code.Length * 2);
-			using (var writer = new StringWriter(buffer))
-			{
-				new CodeColorizer().Colorize(
-					code,
-					generator.Language == Language.Cpp ? Languages.Cpp : Languages.CSharp,
-					new RtfFormatter(),
-					StyleSheets.Default,
-					writer
-				);
-			}
-
-			codeRichTextBox.Rtf = buffer.ToString();
+			codeRichTextBox.Rtf = new RtfCodeColorizer().Colorize(
+				code,
+				generator.Language == Language.Cpp ? Languages.Cpp : Languages.CSharp
+			);
 		}
 
 		protected override void OnLoad(EventArgs e)
@@ -61,30 +52,56 @@ namespace ReClassNET.Forms
 		}
 	}
 
-	internal class RtfFormatter : IFormatter
+	/// <summary>Colorizes source code and returns it as RTF.</summary>
+	internal class RtfCodeColorizer : CodeColorizerBase
 	{
-		private readonly RtfBuilder builder = new RtfBuilder(RtfFont.Consolas, 20);
+		private RtfBuilder builder;
 
-		public void Write(string parsedSourceCode, IList<Scope> scopes, IStyleSheet styleSheet, TextWriter textWriter)
+		public RtfCodeColorizer()
+			: base(StyleDictionary.DefaultLight, null)
 		{
-			if (scopes.Any())
-			{
-				builder.SetForeColor(styleSheet.Styles[scopes.First().Name].Foreground).Append(parsedSourceCode);
-			}
-			else
-			{
-				builder.Append(parsedSourceCode);
-			}
 		}
 
-		public void WriteHeader(IStyleSheet styleSheet, ILanguage language, TextWriter textWriter)
+		public string Colorize(string sourceCode, ILanguage language)
 		{
+			builder = new RtfBuilder(RtfFont.Consolas, 20);
 
+			// The parser may split a line break into separate chunks which the RtfBuilder wouldn't detect anymore.
+			// So use a single character while parsing and restore the line breaks when writing.
+			languageParser.Parse(sourceCode.Replace("\r\n", "\n"), language, Write);
+
+			return builder.ToString();
 		}
 
-		public void WriteFooter(IStyleSheet styleSheet, ILanguage language, TextWriter textWriter)
+		protected override void Write(string parsedSourceCode, IList<Scope> scopes)
 		{
-			textWriter.Write(builder.ToString());
+			if (scopes.Count > 0 && TryGetForeColor(scopes[0].Name, out var color))
+			{
+				builder.SetForeColor(color);
+			}
+
+			builder.Append(parsedSourceCode.Replace("\n", Environment.NewLine));
+		}
+
+		private bool TryGetForeColor(string scopeName, out Color color)
+		{
+			color = default;
+
+			if (!Styles.Contains(scopeName))
+			{
+				return false;
+			}
+
+			// The colors are stored as #AARRGGBB.
+			var foreground = Styles[scopeName].Foreground;
+			if (string.IsNullOrEmpty(foreground) || !int.TryParse(foreground.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var argb))
+			{
+				return false;
+			}
+
+			color = Color.FromArgb(argb);
+
+			return true;
 		}
 	}
 }

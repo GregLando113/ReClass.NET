@@ -4,8 +4,8 @@ using System.Drawing;
 using System.Globalization;
 using System.Text;
 using System.Windows.Forms;
-using Microsoft.SqlServer.MessageBox;
 using ReClassNET.Core;
+using ReClassNET.Extensions;
 using ReClassNET.Forms;
 using ReClassNET.Logger;
 using ReClassNET.Memory;
@@ -96,19 +96,44 @@ namespace ReClassNET
 			SettingsSerializer.Save(Settings);
 		}
 
-		/// <summary>Shows the exception in a special form.</summary>
+		/// <summary>Shows the exception in a dialog with expandable details.</summary>
 		/// <param name="ex">The exception.</param>
 		public static void ShowException(Exception ex)
 		{
-			ex.HelpLink = Constants.HelpUrl;
+			var details = ex.ToString();
 
-			var msg = new ExceptionMessageBox(ex)
+			var copyButton = new TaskDialogButton("Copy details")
 			{
-				Beep = false,
-				ShowToolBar = true,
-				Symbol = ExceptionMessageBoxSymbol.Error
+				AllowCloseDialog = false
 			};
-			msg.Show(null);
+			copyButton.Click += (s, e) => Clipboard.SetText(details);
+
+			var page = new TaskDialogPage
+			{
+				Caption = Constants.ApplicationName,
+				Heading = ex.GetType().Name,
+				Text = ex.GetMessageChain(),
+				Icon = TaskDialogIcon.Error,
+				AllowCancel = true,
+				SizeToContent = true,
+				Expander = new TaskDialogExpander(details)
+				{
+					CollapsedButtonText = "Show details",
+					ExpandedButtonText = "Hide details",
+					Position = TaskDialogExpanderPosition.AfterFootnote
+				},
+				Buttons = { copyButton, TaskDialogButton.Close }
+			};
+
+			var owner = Form.ActiveForm;
+			if (owner != null)
+			{
+				TaskDialog.ShowDialog(owner, page);
+			}
+			else
+			{
+				TaskDialog.ShowDialog(page);
+			}
 		}
 	}
 }

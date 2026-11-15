@@ -41,16 +41,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="ColorCode">
-      <HintPath>..\Dependencies\ColorCode.dll</HintPath>
-    </Reference>
     <Reference Include="Dia2Lib">
       <HintPath>..\Dependencies\Dia2Lib.dll</HintPath>
       <EmbedInteropTypes>True</EmbedInteropTypes>
     </Reference>
-    <Reference Include="Microsoft.ExceptionMessageBox">
-      <HintPath>..\Dependencies\Microsoft.ExceptionMessageBox.dll</HintPath>
-    </Reference>
+  </ItemGroup>
+
+  <!-- The symbol server library is loaded by DIA when symbols get downloaded. -->
+  <ItemGroup>
+    <None Include="..\Dependencies\$(Platform)\symsrv.dll" Link="symsrv.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <!-- Source files that exist on disk but were never part of the build. -->
@@ -74,6 +73,10 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ColorCode.Core" Version="2.0.15" />
   </ItemGroup>
 
   <!-- Resources.resx embeds this file to show the build date in the about dialog. -->
