@@ -1,17 +1,21 @@
 using System;
 using System.Diagnostics.Contracts;
+using System.Linq;
 using System.Windows.Forms;
 using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Native;
 using ReClassNET.Project;
 using ReClassNET.UI;
+using ReClassNET.UI.Theming;
 using ReClassNET.Util;
 
 namespace ReClassNET.Forms
 {
 	public partial class SettingsForm : IconForm
 	{
+		internal class ThemeModeComboBox : EnumComboBox<ThemeMode> { }
+
 		private readonly Settings settings;
 		private readonly CppTypeMapping typeMapping;
 
@@ -39,6 +43,7 @@ namespace ReClassNET.Forms
 
 			SetGeneralBindings();
 			SetColorBindings();
+			SetThemeBindings();
 			SetTypeDefinitionBindings();
 
 			if (NativeMethods.IsUnix())
@@ -64,7 +69,44 @@ namespace ReClassNET.Forms
 		{
 			base.OnFormClosed(e);
 
+			ThemeManager.ThemeChanged -= OnThemeChanged;
+
 			GlobalWindowManager.RemoveWindow(this);
+		}
+
+		private void SetThemeBindings()
+		{
+			themeComboBox.SelectedValue = settings.Theme;
+
+			UpdateThemeColorsInfo();
+
+			ThemeManager.ThemeChanged += OnThemeChanged;
+		}
+
+		private void themeComboBox_SelectionChangeCommitted(object sender, EventArgs e)
+		{
+			settings.Theme = themeComboBox.SelectedValue;
+
+			ThemeManager.Refresh();
+		}
+
+		private void OnThemeChanged(object sender, EventArgs e)
+		{
+			// The color properties now map to the color scheme of the new theme.
+			foreach (var colorBox in colorsSettingTabPage.Controls.OfType<ColorBox>().Concat(nodeColorGroupBox.Controls.OfType<ColorBox>()))
+			{
+				foreach (Binding binding in colorBox.DataBindings)
+				{
+					binding.ReadValue();
+				}
+			}
+
+			UpdateThemeColorsInfo();
+		}
+
+		private void UpdateThemeColorsInfo()
+		{
+			themeColorsInfoLabel.Text = $"Editing the colors of the {(ThemeManager.IsDark ? "dark" : "light")} theme.";
 		}
 
 		private void createAssociationButton_Click(object sender, EventArgs e)

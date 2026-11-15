@@ -10,6 +10,7 @@ using ReClassNET.Logger;
 using ReClassNET.Memory;
 using ReClassNET.Native;
 using ReClassNET.UI;
+using ReClassNET.UI.Theming;
 using ReClassNET.Util;
 
 namespace ReClassNET
@@ -81,6 +82,8 @@ namespace ReClassNET
 			using (var coreFunctions = new CoreFunctionsManager())
 			{
 				RemoteProcess = new RemoteProcess(coreFunctions);
+
+				ThemeManager.Initialize();
 
 				MainForm = new MainForm();
 

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using ReClassNET.UI;
+using ReClassNET.UI.Theming;
 
 namespace ReClassNET.Controls
 {
@@ -45,6 +46,7 @@ namespace ReClassNET.Controls
 			if (Visible)
 			{
 				BackColor = Program.Settings.BackgroundColor;
+				ForeColor = ThemeManager.Colors.Text;
 
 				if (currentHotSpot != null)
 				{

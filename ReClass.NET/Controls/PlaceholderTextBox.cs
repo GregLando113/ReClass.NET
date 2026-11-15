@@ -8,8 +8,6 @@ namespace ReClassNET.Controls
 	public class PlaceholderTextBox : TextBox
 	{
 		private Font fontBackup;
-		private Color foreColorBackup;
-		private Color backColorBackup;
 
 		/// <summary>
 		/// The color of the placeholder text.
@@ -26,8 +24,6 @@ namespace ReClassNET.Controls
 		public PlaceholderTextBox()
 		{
 			fontBackup = Font;
-			foreColorBackup = ForeColor;
-			backColorBackup = BackColor;
 
 			SetStyle(ControlStyles.UserPaint, true);
 		}
@@ -41,8 +37,6 @@ namespace ReClassNET.Controls
 				if (!GetStyle(ControlStyles.UserPaint))
 				{
 					fontBackup = Font;
-					foreColorBackup = ForeColor;
-					backColorBackup = BackColor;
 
 					SetStyle(ControlStyles.UserPaint, true);
 				}
@@ -54,8 +48,6 @@ namespace ReClassNET.Controls
 					SetStyle(ControlStyles.UserPaint, false);
 
 					Font = fontBackup;
-					ForeColor = foreColorBackup;
-					BackColor = backColorBackup;
 				}
 			}
 		}

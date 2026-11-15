@@ -527,6 +527,12 @@
     <Compile Include="Symbols\SymbolReader.cs" />
     <Compile Include="Symbols\SymbolStore.cs" />
     <Compile Include="UI\GlobalWindowManager.cs" />
+    <Compile Include="NodeColorScheme.cs" />
+    <Compile Include="UI\Theming\DarkModeNative.cs" />
+    <Compile Include="UI\Theming\DarkTabControlPainter.cs" />
+    <Compile Include="UI\Theming\ThemeColors.cs" />
+    <Compile Include="UI\Theming\ThemeManager.cs" />
+    <Compile Include="UI\Theming\ThemeMode.cs" />
     <Compile Include="Controls\DrawContext.cs" />
     <Compile Include="Extensions\EnumerableExtension.cs" />
     <Compile Include="Util\HexadecimalFormatter.cs" />

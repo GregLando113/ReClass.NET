@@ -1,5 +1,6 @@
 ﻿using System.Drawing;
 using System.Text;
+using ReClassNET.UI.Theming;
 using ReClassNET.Util;
 
 namespace ReClassNET
@@ -44,35 +45,48 @@ namespace ReClassNET
 
 		public bool ShowCommentPluginInfo { get; set; } = true;
 
+		// Theme Settings
+
+		public ThemeMode Theme { get; set; } = ThemeMode.Light;
+
 		// Colors
 
-		public Color BackgroundColor { get; set; } = Color.FromArgb(255, 255, 255);
+		/// <summary>The node colors used with the light theme.</summary>
+		public NodeColorScheme LightColors { get; } = NodeColorScheme.CreateLight();
 
-		public Color SelectedColor { get; set; } = Color.FromArgb(240, 240, 240);
+		/// <summary>The node colors used with the dark theme.</summary>
+		public NodeColorScheme DarkColors { get; } = NodeColorScheme.CreateDark();
 
-		public Color HiddenColor { get; set; } = Color.FromArgb(240, 240, 240);
+		/// <summary>The node colors of the active theme.</summary>
+		public NodeColorScheme Colors => ThemeManager.IsDark ? DarkColors : LightColors;
 
-		public Color OffsetColor { get; set; } = Color.FromArgb(255, 0, 0);
+		public Color BackgroundColor { get => Colors.Background; set => Colors.Background = value; }
 
-		public Color AddressColor { get; set; } = Color.FromArgb(0, 200, 0);
+		public Color SelectedColor { get => Colors.Selected; set => Colors.Selected = value; }
 
-		public Color HexColor { get; set; } = Color.FromArgb(0, 0, 0);
+		public Color HiddenColor { get => Colors.Hidden; set => Colors.Hidden = value; }
 
-		public Color TypeColor { get; set; } = Color.FromArgb(0, 0, 255);
+		public Color OffsetColor { get => Colors.Offset; set => Colors.Offset = value; }
 
-		public Color NameColor { get; set; } = Color.FromArgb(32, 32, 128);
+		public Color AddressColor { get => Colors.Address; set => Colors.Address = value; }
 
-		public Color ValueColor { get; set; } = Color.FromArgb(255, 128, 0);
+		public Color HexColor { get => Colors.Hex; set => Colors.Hex = value; }
 
-		public Color IndexColor { get; set; } = Color.FromArgb(32, 200, 200);
+		public Color TypeColor { get => Colors.Type; set => Colors.Type = value; }
 
-		public Color CommentColor { get; set; } = Color.FromArgb(0, 200, 0);
+		public Color NameColor { get => Colors.Name; set => Colors.Name = value; }
 
-		public Color TextColor { get; set; } = Color.FromArgb(0, 0, 255);
+		public Color ValueColor { get => Colors.Value; set => Colors.Value = value; }
 
-		public Color VTableColor { get; set; } = Color.FromArgb(0, 255, 0);
+		public Color IndexColor { get => Colors.Index; set => Colors.Index = value; }
 
-		public Color PluginColor { get; set; } = Color.FromArgb(255, 0, 255);
+		public Color CommentColor { get => Colors.Comment; set => Colors.Comment = value; }
+
+		public Color TextColor { get => Colors.Text; set => Colors.Text = value; }
+
+		public Color VTableColor { get => Colors.VTable; set => Colors.VTable = value; }
+
+		public Color PluginColor { get => Colors.Plugin; set => Colors.Plugin = value; }
 
 		public CustomDataMap CustomData { get; } = new CustomDataMap();
 

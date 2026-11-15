@@ -1,6 +1,8 @@
+using System;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Xml.Linq;
+using ReClassNET.UI.Theming;
 
 namespace ReClassNET.Util
 {
@@ -10,6 +12,7 @@ namespace ReClassNET.Util
 		private const string XmlGeneralElement = "General";
 		private const string XmlDisplayElement = "Display";
 		private const string XmlColorsElement = "Colors";
+		private const string XmlDarkColorsElement = "DarkColors";
 		private const string XmlCustomDataElement = "CustomData";
 
 		#region Read Settings
@@ -36,6 +39,7 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(general, nameof(settings.StayOnTop), e => settings.StayOnTop = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RunAsAdmin), e => settings.RunAsAdmin = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RandomizeWindowTitle), e => settings.RandomizeWindowTitle = XElementSerializer.ToBool(e));
+					XElementSerializer.TryRead(general, nameof(settings.Theme), e => settings.Theme = Enum.TryParse<ThemeMode>(XElementSerializer.ToString(e), out var theme) ? theme : ThemeMode.Light);
 				}
 				var display = root?.Element(XmlDisplayElement);
 				if (display != null)
@@ -52,23 +56,8 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(display, nameof(settings.ShowCommentString), e => settings.ShowCommentString = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(display, nameof(settings.ShowCommentPluginInfo), e => settings.ShowCommentPluginInfo = XElementSerializer.ToBool(e));
 				}
-				var colors = root?.Element(XmlColorsElement);
-				if (colors != null)
-				{
-					XElementSerializer.TryRead(colors, nameof(settings.BackgroundColor), e => settings.BackgroundColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.SelectedColor), e => settings.SelectedColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.HiddenColor), e => settings.HiddenColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.OffsetColor), e => settings.OffsetColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.AddressColor), e => settings.AddressColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.HexColor), e => settings.HexColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.TypeColor), e => settings.TypeColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.NameColor), e => settings.NameColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.ValueColor), e => settings.ValueColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.IndexColor), e => settings.IndexColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.CommentColor), e => settings.CommentColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.TextColor), e => settings.TextColor = XElementSerializer.ToColor(e));
-					XElementSerializer.TryRead(colors, nameof(settings.VTableColor), e => settings.VTableColor = XElementSerializer.ToColor(e));
-				}
+				ReadColors(root?.Element(XmlColorsElement), settings.LightColors);
+				ReadColors(root?.Element(XmlDarkColorsElement), settings.DarkColors);
 				var customData = root?.Element(XmlCustomDataElement);
 				if (customData != null)
 				{
@@ -107,7 +96,8 @@ namespace ReClassNET.Util
 						XElementSerializer.ToXml(nameof(settings.LastProcess), settings.LastProcess),
 						XElementSerializer.ToXml(nameof(settings.StayOnTop), settings.StayOnTop),
 						XElementSerializer.ToXml(nameof(settings.RunAsAdmin), settings.RunAsAdmin),
-						XElementSerializer.ToXml(nameof(settings.RandomizeWindowTitle), settings.RandomizeWindowTitle)
+						XElementSerializer.ToXml(nameof(settings.RandomizeWindowTitle), settings.RandomizeWindowTitle),
+						XElementSerializer.ToXml(nameof(settings.Theme), settings.Theme.ToString())
 					),
 					new XElement(
 						XmlDisplayElement,
@@ -123,27 +113,61 @@ namespace ReClassNET.Util
 						XElementSerializer.ToXml(nameof(settings.ShowCommentString), settings.ShowCommentString),
 						XElementSerializer.ToXml(nameof(settings.ShowCommentPluginInfo), settings.ShowCommentPluginInfo)
 					),
-					new XElement(
-						XmlColorsElement,
-						XElementSerializer.ToXml(nameof(settings.BackgroundColor), settings.BackgroundColor),
-						XElementSerializer.ToXml(nameof(settings.SelectedColor), settings.SelectedColor),
-						XElementSerializer.ToXml(nameof(settings.HiddenColor), settings.HiddenColor),
-						XElementSerializer.ToXml(nameof(settings.OffsetColor), settings.OffsetColor),
-						XElementSerializer.ToXml(nameof(settings.AddressColor), settings.AddressColor),
-						XElementSerializer.ToXml(nameof(settings.HexColor), settings.HexColor),
-						XElementSerializer.ToXml(nameof(settings.TypeColor), settings.TypeColor),
-						XElementSerializer.ToXml(nameof(settings.NameColor), settings.NameColor),
-						XElementSerializer.ToXml(nameof(settings.ValueColor), settings.ValueColor),
-						XElementSerializer.ToXml(nameof(settings.IndexColor), settings.IndexColor),
-						XElementSerializer.ToXml(nameof(settings.CommentColor), settings.CommentColor),
-						XElementSerializer.ToXml(nameof(settings.TextColor), settings.TextColor),
-						XElementSerializer.ToXml(nameof(settings.VTableColor), settings.VTableColor)
-					),
+					WriteColors(XmlColorsElement, settings.LightColors),
+					WriteColors(XmlDarkColorsElement, settings.DarkColors),
 					settings.CustomData.Serialize(XmlCustomDataElement)
 				)
 			);
 
 			document.Save(sw);
+		}
+
+		#endregion
+
+		#region Colors
+
+		private static void ReadColors(XElement element, NodeColorScheme colors)
+		{
+			if (element == null)
+			{
+				return;
+			}
+
+			XElementSerializer.TryRead(element, "BackgroundColor", e => colors.Background = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "SelectedColor", e => colors.Selected = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "HiddenColor", e => colors.Hidden = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "OffsetColor", e => colors.Offset = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "AddressColor", e => colors.Address = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "HexColor", e => colors.Hex = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "TypeColor", e => colors.Type = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "NameColor", e => colors.Name = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "ValueColor", e => colors.Value = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "IndexColor", e => colors.Index = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "CommentColor", e => colors.Comment = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "TextColor", e => colors.Text = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "VTableColor", e => colors.VTable = XElementSerializer.ToColor(e));
+			XElementSerializer.TryRead(element, "PluginColor", e => colors.Plugin = XElementSerializer.ToColor(e));
+		}
+
+		private static XElement WriteColors(string name, NodeColorScheme colors)
+		{
+			return new XElement(
+				name,
+				XElementSerializer.ToXml("BackgroundColor", colors.Background),
+				XElementSerializer.ToXml("SelectedColor", colors.Selected),
+				XElementSerializer.ToXml("HiddenColor", colors.Hidden),
+				XElementSerializer.ToXml("OffsetColor", colors.Offset),
+				XElementSerializer.ToXml("AddressColor", colors.Address),
+				XElementSerializer.ToXml("HexColor", colors.Hex),
+				XElementSerializer.ToXml("TypeColor", colors.Type),
+				XElementSerializer.ToXml("NameColor", colors.Name),
+				XElementSerializer.ToXml("ValueColor", colors.Value),
+				XElementSerializer.ToXml("IndexColor", colors.Index),
+				XElementSerializer.ToXml("CommentColor", colors.Comment),
+				XElementSerializer.ToXml("TextColor", colors.Text),
+				XElementSerializer.ToXml("VTableColor", colors.VTable),
+				XElementSerializer.ToXml("PluginColor", colors.Plugin)
+			);
 		}
 
 		#endregion
