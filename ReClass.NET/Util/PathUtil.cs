@@ -1,37 +1,18 @@
 using System;
 using System.Diagnostics.Contracts;
 using System.IO;
-using System.Reflection;
 
 namespace ReClassNET.Util
 {
 	public class PathUtil
 	{
-		private static readonly Lazy<string> executablePath = new Lazy<string>(() =>
-		{
-			string path = null;
-			try
-			{
-				path = Assembly.GetExecutingAssembly().Location;
-			}
-			catch
-			{
-				// ignored
-			}
-
-			if (string.IsNullOrEmpty(path))
-			{
-				path = Assembly.GetExecutingAssembly().GetName().CodeBase;
-				path = FileUrlToPath(path);
-			}
-
-			return path;
-		});
+		// The process path is the .exe host. Assembly.Location would point to the .dll on modern .NET.
+		private static readonly Lazy<string> executablePath = new Lazy<string>(() => Environment.ProcessPath);
 
 		/// <summary>Gets the full pathname of the executable file.</summary>
 		public static string ExecutablePath => executablePath.Value;
 
-		private static readonly Lazy<string> executableFolderPath = new Lazy<string>(() => Path.GetDirectoryName(executablePath.Value));
+		private static readonly Lazy<string> executableFolderPath = new Lazy<string>(() => AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
 		/// <summary>Gets the full pathname of the executable folder.</summary>
 		public static string ExecutableFolderPath => executableFolderPath.Value;

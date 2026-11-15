@@ -30,7 +30,7 @@ namespace ReClassNET_Launcher
 				return;
 			}
 
-			var is64Bit = IntPtr.Size == 8;
+			var is64Bit = Environment.Is64BitOperatingSystem;
 
 			// If there is a file in the commandline, read the platform.
 			if (commandLineArgs.FileName != null)

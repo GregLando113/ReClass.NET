@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 [assembly: AssemblyTitle("ReClass.NET_Tests")]
 [assembly: AssemblyDescription("")]
@@ -12,6 +13,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCulture("")]
 
 [assembly: ComVisible(false)]
+[assembly: SupportedOSPlatform("windows")]
 
 [assembly: Guid("e2d0424d-738f-41c3-9935-1b282624600f")]
 

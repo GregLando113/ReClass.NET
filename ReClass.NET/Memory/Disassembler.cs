@@ -170,7 +170,7 @@ namespace ReClassNET.Memory
 					coreFunctions.DisassembleCode(currentAddress, offset + 1, address - offset, false, (ref InstructionData data) =>
 					{
 						var nextAddress = currentAddress + data.Length;
-						if (nextAddress.CompareTo(targetBufferAddress) > 0)
+						if (nextAddress.CompareToUnsigned(targetBufferAddress) > 0)
 						{
 							return false;
 						}

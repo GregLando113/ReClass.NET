@@ -17,11 +17,6 @@ namespace ReClassNET.UI
 		private static double scaleX = 1.0;
 		private static double scaleY = 1.0;
 
-		public static void ConfigureProcess()
-		{
-			NativeMethods.SetProcessDpiAwareness();
-		}
-
 		public static void SetDpi(int x, int y)
 		{
 			dpiX = x;

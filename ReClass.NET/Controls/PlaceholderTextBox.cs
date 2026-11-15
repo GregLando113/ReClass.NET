@@ -21,7 +21,7 @@ namespace ReClassNET.Controls
 		/// The placeholder text.
 		/// </summary>
 		[DefaultValue("")]
-		public string PlaceholderText { get; set; }
+		public new string PlaceholderText { get; set; }
 
 		public PlaceholderTextBox()
 		{

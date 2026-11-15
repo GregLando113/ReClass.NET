@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.Text;
 using System.Windows.Forms;
 using Microsoft.SqlServer.MessageBox;
 using ReClassNET.Core;
@@ -41,15 +42,14 @@ namespace ReClassNET
 
 			CommandLineArgs = new CommandLineArgs(args);
 
-			try
-			{
-				DpiUtil.ConfigureProcess();
-				DpiUtil.TrySetDpiFromCurrentDesktop();
-			}
-			catch
-			{
-				// ignored
-			}
+			// Applies the high DPI mode, visual styles and default font configured in the project file.
+			// This must happen before the first window handle or Graphics object gets created.
+			ApplicationConfiguration.Initialize();
+
+			// Code page encodings like Windows-1252 are not available by default.
+			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+			DpiUtil.TrySetDpiFromCurrentDesktop();
 
 			MonoSpaceFont = new FontEx
 			{
@@ -59,9 +59,6 @@ namespace ReClassNET
 			};
 
 			NativeMethods.EnableDebugPrivileges();
-
-			Application.EnableVisualStyles();
-			Application.SetCompatibleTextRenderingDefault(false);
 
 			CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 

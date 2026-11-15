@@ -67,7 +67,7 @@ namespace ReClass.NET_Tests.Extensions
 		[MemberData(nameof(GetTestCompareToData))]
 		public void TestCompareTo(IntPtr ptr, IntPtr other, int expected)
 		{
-			Check.That(ptr.CompareTo(other)).IsEqualTo(expected);
+			Check.That(ptr.CompareToUnsigned(other)).IsEqualTo(expected);
 		}
 
 		public static TheoryData<IntPtr, IntPtr, IntPtr, int> GetTestCompareToRangeData => new TheoryData<IntPtr, IntPtr, IntPtr, int>

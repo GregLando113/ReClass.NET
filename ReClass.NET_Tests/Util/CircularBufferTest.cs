@@ -38,7 +38,7 @@ namespace ReClass.NET_Tests.Util
 
 			var overwrittenValue = cb.Enqueue(value);
 
-			Check.That(overwrittenValue).IsEqualTo(default);
+			Check.That(overwrittenValue).IsEqualTo(0);
 
 			Check.That(cb.Dequeue()).IsEqualTo(value);
 		}

@@ -18,6 +18,7 @@ namespace ReClassNET.Controls
 		public event EventHandler ColorChanged;
 
 		private Color color;
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public Color Color
 		{
 			get => color;

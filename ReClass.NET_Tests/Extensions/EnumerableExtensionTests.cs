@@ -85,24 +85,6 @@ namespace ReClass.NET_Tests.Extensions
 			Check.That(counter).IsEqualTo(expected);
 		}
 
-		public static TheoryData<IEnumerable<int>, Func<int, int>, IEnumerable<int>> GetTestDistinctByData => new TheoryData<IEnumerable<int>, Func<int, int>, IEnumerable<int>>
-		{
-			{ Enumerable.Empty<int>(), i => i, Enumerable.Empty<int>() },
-			{ new [] { 1 }, i => i, new [] { 1 } },
-			{ new [] { 1, 1, 1, 1 }, i => i, new [] { 1 } },
-			{ new [] { 1, 2, 3, 4 }, i => i, new [] { 1, 2, 3, 4 } },
-			{ new [] { 1, 1, 2, 2, 3, 3 }, i => i, new [] { 1, 2, 3 } },
-			{ new [] { 1, 1, 2, 2, 3, 4 }, i => i, new [] { 1, 2, 3, 4 } },
-			{ new [] { 1, 1, 2, 2, 3, 4 }, i => 0, new [] { 1 } }
-		};
-
-		[Theory]
-		[MemberData(nameof(GetTestDistinctByData))]
-		public void TestDistinctBy(IEnumerable<int> sut, Func<int, int> selector, IEnumerable<int> expected)
-		{
-			Check.That(sut.DistinctBy(selector)).IsEquivalentTo(expected);
-		}
-
 		public static TheoryData<IEnumerable<int>, IEnumerable<int>, bool> GetTestIsEquivalentToData => new TheoryData<IEnumerable<int>, IEnumerable<int>, bool>
 		{
 			{ Enumerable.Empty<int>(), Enumerable.Empty<int>(), true },

@@ -246,16 +246,22 @@ namespace ReClassNET.Controls
 			}
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public ContextMenuStrip ClassesContextMenuStrip { get; set; }
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public ContextMenuStrip ClassContextMenuStrip { get; set; }
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public ContextMenuStrip EnumsContextMenuStrip { get; set; }
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public ContextMenuStrip EnumContextMenuStrip { get; set; }
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public ContextMenuStrip TemplatesContextMenuStrip { get; set; }
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public ContextMenuStrip TemplateContextMenuStrip { get; set; }
 
 		/// <summary>The selected template or null if no template is selected.</summary>

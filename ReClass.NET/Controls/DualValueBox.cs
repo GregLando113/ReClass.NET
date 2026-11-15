@@ -7,6 +7,7 @@ namespace ReClassNET.Controls
 	[Designer(typeof(DualValueControlDesigner))]
 	public partial class DualValueBox : UserControl
 	{
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public bool ShowSecondInputField
 		{
 			get => tableLayoutPanel.ColumnStyles[0].Width <= 99;
@@ -30,12 +31,14 @@ namespace ReClassNET.Controls
 			}
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public string Value1
 		{
 			get => value1TextBox.Text;
 			set => value1TextBox.Text = value;
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public string Value2
 		{
 			get => value2TextBox.Text;

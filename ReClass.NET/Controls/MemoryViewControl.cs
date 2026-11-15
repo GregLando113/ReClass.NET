@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Drawing;
@@ -60,6 +61,7 @@ namespace ReClassNET.Controls
 
 		private readonly FontEx font;
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public ContextMenuStrip NodeContextMenuStrip { get; set; }
 
 		public event DrawContextRequestEventHandler DrawContextRequested;

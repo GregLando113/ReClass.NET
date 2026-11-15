@@ -455,8 +455,8 @@ namespace ReClassNET.Memory
 			{
 				EnumerateRemoteSectionsAndModules(out var newSections, out var newModules);
 
-				newModules.Sort((m1, m2) => m1.Start.CompareTo(m2.Start));
-				newSections.Sort((s1, s2) => s1.Start.CompareTo(s2.Start));
+				newModules.Sort((m1, m2) => m1.Start.CompareToUnsigned(m2.Start));
+				newSections.Sort((s1, s2) => s1.Start.CompareToUnsigned(s2.Start));
 
 				lock (modules)
 				{

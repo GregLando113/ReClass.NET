@@ -15,30 +15,35 @@ namespace ReClassNET.Controls
 
 	public partial class MemoryRecordList : UserControl
 	{
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public bool ShowDescriptionColumn
 		{
 			get => descriptionColumn.Visible;
 			set => descriptionColumn.Visible = value;
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public bool ShowAddressColumn
 		{
 			get => addressColumn.Visible;
 			set => addressColumn.Visible = value;
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public bool ShowValueTypeColumn
 		{
 			get => valueTypeColumn.Visible;
 			set => valueTypeColumn.Visible = value;
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public bool ShowValueColumn
 		{
 			get => valueColumn.Visible;
 			set => valueColumn.Visible = value;
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
 		public bool ShowPreviousValueColumn
 		{
 			get => previousValueColumn.Visible;

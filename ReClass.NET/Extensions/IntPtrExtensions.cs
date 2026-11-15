@@ -105,9 +105,13 @@ namespace ReClassNET.Extensions
 #endif
 		}
 
+		/// <summary>
+		/// Compares two addresses as unsigned values.
+		/// IntPtr.CompareTo can't be used because it compares signed values.
+		/// </summary>
 		[Pure]
 		[DebuggerStepThrough]
-		public static int CompareTo(this IntPtr lhs, IntPtr rhs)
+		public static int CompareToUnsigned(this IntPtr lhs, IntPtr rhs)
 		{
 #if RECLASSNET64
 			return ((ulong)lhs.ToInt64()).CompareTo((ulong)rhs.ToInt64());
@@ -124,7 +128,7 @@ namespace ReClassNET.Extensions
 			{
 				return 0;
 			}
-			return CompareTo(address, start);
+			return CompareToUnsigned(address, start);
 		}
 
 		/// <summary>

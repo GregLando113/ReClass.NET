@@ -45,6 +45,7 @@ namespace ReClassNET.Forms
 
 		public MenuStrip MainMenu => mainMenuStrip;
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public ClassNode CurrentClassNode
 		{
 			get => currentClassNode;
