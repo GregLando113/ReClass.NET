@@ -37,7 +37,6 @@ This is a port of ReClass to the .NET platform with lots of additional features.
 - Class address calculator
 - Code Generator (C++ / C#)
 - Module / Section Dumper
-- Linux Support (tested on Ubuntu 18.04)
 - Debugger with "Find out what writes/accesses this address" support
 - Plugin Support
   - Plugins can be written in different languages (example: C++, C++/CLI, C#)
@@ -56,10 +55,13 @@ This is a port of ReClass to the .NET platform with lots of additional features.
 - [DriverReader](https://github.com/niemand-sec/ReClass.NET-DriverReader) (by [Niemand](https://github.com/niemand-sec))
 
 To install a plugin just copy it in the "Plugins" folder.
+Plugins written in C# must target `net10.0-windows` and reference `ReClass.NET.dll`. Plugins built for the .NET Framework versions of ReClass.NET need to be rebuilt.
 If you want to develop your own plugin just learn from the code of the [Sample Plugins](https://github.com/ReClassNET/ReClass.NET-SamplePlugin) and [Frostbite Plugin](https://github.com/ReClassNET/ReClass.NET-FrostbitePlugin) repositories. If you have developed a nice plugin, leave me a message and I will add it to the list above.
 
 ## Installation
 Just download the [latest version](https://github.com/ReClassNET/ReClass.NET/releases) and start the x86 / x64 version or let the launcher decide.
+
+ReClass.NET runs on Windows and needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0). Install the x64 runtime for the launcher and the x64 version, and the x86 runtime as well if you want to use the x86 version.
 
 ## Tips
 - Lots of elements have a context menu. Just right-click it and see what you can do there.
@@ -74,23 +76,18 @@ Just download the [latest version](https://github.com/ReClassNET/ReClass.NET/rel
   Valid operations are read ([..]), add (+), sub (-), mul (*) and div (/). Please note that all operations are integer calculations.
 
 ## Compiling
-If you want to compile ReClass.NET just fork the repository and open the ReClass.NET.sln file with Visual Studio 2019.
-Compile the project and copy the dependencies to the output folder.
+If you want to compile ReClass.NET just fork the repository and open the ReClass.NET.sln file with Visual Studio 2026. You need the ".NET desktop development" and "Desktop development with C++" workloads and the .NET 10 SDK.
 
-To compile the linux native core library, you need WSL [installed and configured](https://learn.microsoft.com/en-us/cpp/build/walkthrough-build-debug-wsl2). If you do not need linux support, simply unload the project in the Solution Explorer. If you want to build cross-platform (x86/x64) you have to install `g++-multilib` too.
-
-If you use the `Makefile` with `docker` or `podman` you have to build the needed image `gcc_multilib` from the following `Dockerfile` (`docker build -t gcc_multi .`):
+The solution builds one application per platform (x86 / x64) plus the launcher:
 
 ```
-FROM ubuntu:latest
-
-RUN apt-get update \
- && apt-get install --assume-yes --no-install-recommends --quiet \
-        make \
-        g++ \
-        g++-multilib \
- && apt-get clean all
+msbuild ReClass.NET.sln -restore -p:Configuration=Release -p:Platform=x64
+msbuild ReClass.NET.sln -restore -p:Configuration=Release -p:Platform=x86
 ```
+
+The output is written to `bin\<Configuration>`. Use `msbuild` from a Visual Studio developer command prompt because `dotnet build` can't build the native core library.
+
+To run the tests use `dotnet test ReClass.NET_Tests -p:Platform=x64` (or `x86`).
 
 ## Videos
 
