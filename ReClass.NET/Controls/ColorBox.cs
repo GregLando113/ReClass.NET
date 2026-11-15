@@ -101,7 +101,7 @@ namespace ReClassNET.Controls
 			var rect = colorPanel.ClientRectangle;
 			rect.Width--;
 			rect.Height--;
-			e.Graphics.DrawRectangle(Pens.Black, rect);
+			e.Graphics.DrawRectangle(SystemPens.ControlText, rect);
 		}
 	}
 }

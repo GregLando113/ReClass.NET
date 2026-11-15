@@ -178,6 +178,9 @@ namespace ReClassNET.UI
 			}
 
 			node.GetUserInterfaceInfo(out label, out icon);
+
+			// Most of the node icons consist of black text.
+			icon = Theming.DarkMode.AdaptImage(icon);
 		}
 	}
 }

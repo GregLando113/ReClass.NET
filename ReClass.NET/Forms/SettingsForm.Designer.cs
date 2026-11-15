@@ -32,6 +32,10 @@ namespace ReClassNET.Forms
 		{
             this.settingsTabControl = new System.Windows.Forms.TabControl();
             this.generalSettingsTabPage = new System.Windows.Forms.TabPage();
+            this.themeLabel = new System.Windows.Forms.Label();
+            this.themeComboBox = new ReClassNET.Forms.SettingsForm.ThemeModeComboBox();
+            this.themeColorsInfoLabel = new System.Windows.Forms.Label();
+            this.themeRestartLabel = new System.Windows.Forms.Label();
             this.fileAssociationGroupBox = new System.Windows.Forms.GroupBox();
             this.removeAssociationButton = new System.Windows.Forms.Button();
             this.createAssociationButton = new System.Windows.Forms.Button();
@@ -158,6 +162,9 @@ namespace ReClassNET.Forms
             this.generalSettingsTabPage.Controls.Add(this.fileAssociationGroupBox);
             this.generalSettingsTabPage.Controls.Add(this.commentsGroupBox);
             this.generalSettingsTabPage.Controls.Add(this.displayGroupBox);
+            this.generalSettingsTabPage.Controls.Add(this.themeComboBox);
+            this.generalSettingsTabPage.Controls.Add(this.themeLabel);
+            this.generalSettingsTabPage.Controls.Add(this.themeRestartLabel);
             this.generalSettingsTabPage.Controls.Add(this.stayOnTopCheckBox);
             this.generalSettingsTabPage.Location = new System.Drawing.Point(4, 22);
             this.generalSettingsTabPage.Name = "generalSettingsTabPage";
@@ -381,10 +388,38 @@ namespace ReClassNET.Forms
             this.stayOnTopCheckBox.Text = "Force ReClass.NET to stay on top";
             this.stayOnTopCheckBox.UseVisualStyleBackColor = true;
             // 
+            // themeLabel
+            // 
+            this.themeLabel.AutoSize = true;
+            this.themeLabel.Location = new System.Drawing.Point(283, 8);
+            this.themeLabel.Name = "themeLabel";
+            this.themeLabel.Size = new System.Drawing.Size(43, 13);
+            this.themeLabel.TabIndex = 5;
+            this.themeLabel.Text = "Theme:";
+            // 
+            // themeComboBox
+            // 
+            this.themeComboBox.Location = new System.Drawing.Point(332, 5);
+            this.themeComboBox.Name = "themeComboBox";
+            this.themeComboBox.Size = new System.Drawing.Size(216, 21);
+            this.themeComboBox.TabIndex = 6;
+            this.themeComboBox.SelectionChangeCommitted += new System.EventHandler(this.themeComboBox_SelectionChangeCommitted);
+            // 
+            // themeRestartLabel
+            // 
+            this.themeRestartLabel.Location = new System.Drawing.Point(283, 205);
+            this.themeRestartLabel.Name = "themeRestartLabel";
+            this.themeRestartLabel.Size = new System.Drawing.Size(265, 20);
+            this.themeRestartLabel.TabIndex = 7;
+            this.themeRestartLabel.Text = "The theme changes after restarting ReClass.NET.";
+            this.themeRestartLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.themeRestartLabel.Visible = false;
+            // 
             // colorsSettingTabPage
             // 
             this.colorsSettingTabPage.Controls.Add(this.nodeColorGroupBox);
             this.colorsSettingTabPage.Controls.Add(this.backgroundLabel);
+            this.colorsSettingTabPage.Controls.Add(this.themeColorsInfoLabel);
             this.colorsSettingTabPage.Controls.Add(this.backgroundColorBox);
             this.colorsSettingTabPage.Location = new System.Drawing.Point(4, 22);
             this.colorsSettingTabPage.Name = "colorsSettingTabPage";
@@ -393,6 +428,15 @@ namespace ReClassNET.Forms
             this.colorsSettingTabPage.TabIndex = 1;
             this.colorsSettingTabPage.Text = "Colors";
             this.colorsSettingTabPage.UseVisualStyleBackColor = true;
+            // 
+            // themeColorsInfoLabel
+            // 
+            this.themeColorsInfoLabel.Location = new System.Drawing.Point(306, 8);
+            this.themeColorsInfoLabel.Name = "themeColorsInfoLabel";
+            this.themeColorsInfoLabel.Size = new System.Drawing.Size(242, 26);
+            this.themeColorsInfoLabel.TabIndex = 3;
+            this.themeColorsInfoLabel.Text = "Colors of the light theme.";
+            this.themeColorsInfoLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // nodeColorGroupBox
             // 
@@ -1148,6 +1192,10 @@ namespace ReClassNET.Forms
 		#endregion
 		private System.Windows.Forms.TabControl settingsTabControl;
 		private System.Windows.Forms.TabPage generalSettingsTabPage;
+		private System.Windows.Forms.Label themeLabel;
+		private ThemeModeComboBox themeComboBox;
+		private System.Windows.Forms.Label themeColorsInfoLabel;
+		private System.Windows.Forms.Label themeRestartLabel;
 		private System.Windows.Forms.TabPage colorsSettingTabPage;
 		private System.Windows.Forms.TabPage typeDefinitionsSettingsTabPage;
 		private System.Windows.Forms.CheckBox stayOnTopCheckBox;

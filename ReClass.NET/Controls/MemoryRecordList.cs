@@ -111,14 +111,14 @@ namespace ReClassNET.Controls
 				var record = (MemoryRecord)resultDataGridView.Rows[e.RowIndex].DataBoundItem;
 				if (record.IsRelativeAddress)
 				{
-					e.CellStyle.ForeColor = Color.ForestGreen;
+					e.CellStyle.ForeColor = Application.IsDarkModeEnabled ? Color.FromArgb(110, 200, 110) : Color.ForestGreen;
 					e.FormattingApplied = true;
 				}
 			}
 			else if (e.ColumnIndex == 3) // Value
 			{
 				var record = (MemoryRecord)resultDataGridView.Rows[e.RowIndex].DataBoundItem;
-				e.CellStyle.ForeColor = record.HasChangedValue ? Color.Red : Color.Black;
+				e.CellStyle.ForeColor = record.HasChangedValue ? (Application.IsDarkModeEnabled ? Color.FromArgb(255, 105, 105) : Color.Red) : SystemColors.WindowText;
 				e.FormattingApplied = true;
 			}
 		}

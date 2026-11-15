@@ -11,6 +11,7 @@ using ReClassNET.Logger;
 using ReClassNET.Memory;
 using ReClassNET.Native;
 using ReClassNET.UI;
+using ReClassNET.UI.Theming;
 using ReClassNET.Util;
 
 namespace ReClassNET
@@ -42,12 +43,23 @@ namespace ReClassNET
 
 			CommandLineArgs = new CommandLineArgs(args);
 
-			// Applies the high DPI mode, visual styles and default font configured in the project file.
-			// This must happen before the first window handle or Graphics object gets created.
-			ApplicationConfiguration.Initialize();
-
 			// Code page encodings like Windows-1252 are not available by default.
 			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+			CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+
+			Settings = SettingsSerializer.Load();
+
+			// Applies the high DPI mode, visual styles and default font configured in the project file.
+			// This and the color mode must be set before the first window handle or Graphics object gets created.
+			ApplicationConfiguration.Initialize();
+
+			Application.SetColorMode(Settings.Theme switch
+			{
+				ThemeMode.Dark => SystemColorMode.Dark,
+				ThemeMode.System => SystemColorMode.System,
+				_ => SystemColorMode.Classic
+			});
 
 			DpiUtil.TrySetDpiFromCurrentDesktop();
 
@@ -60,9 +72,6 @@ namespace ReClassNET
 
 			NativeMethods.EnableDebugPrivileges();
 
-			CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
-
-			Settings = SettingsSerializer.Load();
 			Logger = new GuiLogger();
 
 			if (Settings.RunAsAdmin && !WinUtil.IsAdministrator)

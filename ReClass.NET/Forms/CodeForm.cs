@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
 using ColorCode;
+using ColorCode.Common;
 using ColorCode.Parsing;
 using ColorCode.Styling;
 using ReClassNET.CodeGenerator;
@@ -58,7 +59,7 @@ namespace ReClassNET.Forms
 		private RtfBuilder builder;
 
 		public RtfCodeColorizer()
-			: base(StyleDictionary.DefaultLight, null)
+			: base(Application.IsDarkModeEnabled ? StyleDictionary.DefaultDark : StyleDictionary.DefaultLight, null)
 		{
 		}
 
@@ -75,7 +76,9 @@ namespace ReClassNET.Forms
 
 		protected override void Write(string parsedSourceCode, IList<Scope> scopes)
 		{
-			if (scopes.Count > 0 && TryGetForeColor(scopes[0].Name, out var color))
+			// Text without a scope must use the plain text color because the default (black) is unreadable on the dark theme.
+			if (TryGetForeColor(scopes.Count > 0 ? scopes[0].Name : ScopeName.PlainText, out var color)
+				|| TryGetForeColor(ScopeName.PlainText, out color))
 			{
 				builder.SetForeColor(color);
 			}
