@@ -37,7 +37,7 @@ namespace ReClassNET.Forms
 
 		private void homepageValueLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
 		{
-			Process.Start(Constants.HomepageUrl);
+			Process.Start(new ProcessStartInfo(Constants.HomepageUrl) { UseShellExecute = true });
 		}
 	}
 }

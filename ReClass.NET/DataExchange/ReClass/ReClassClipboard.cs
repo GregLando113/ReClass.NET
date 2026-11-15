@@ -42,7 +42,7 @@ namespace ReClassNET.DataExchange.ReClass
 			Contract.Requires(logger != null);
 			Contract.Ensures(Contract.Result<Tuple<List<ClassNode>, List<BaseNode>>>() != null);
 
-			if (ContainsNodes && Clipboard.GetData(ClipboardFormat) is byte[] data)
+			if (ContainsNodes && Clipboard.TryGetData<byte[]>(ClipboardFormat, out var data))
 			{
 				using var ms = new MemoryStream(data);
 

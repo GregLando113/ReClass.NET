@@ -83,7 +83,7 @@ namespace ReClassNET.Forms
 
 		private void getMoreLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
 		{
-			Process.Start(Constants.PluginUrl);
+			Process.Start(new ProcessStartInfo(Constants.PluginUrl) { UseShellExecute = true });
 		}
 
 		#endregion
