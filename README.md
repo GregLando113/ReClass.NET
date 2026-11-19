@@ -15,6 +15,7 @@ This is a port of ReClass to the .NET platform with lots of additional features.
   - nested templates are supported e.g. `TArray<TList<T>> m_hashSlots;`
 - Address formulas now support byte signature scanning
   - Module tokens e.g. <Gw.exe> now support a byte signature extension to scan for, such as <Gw.exe:55 8B EC 83 ??> etc.
+- Added code generator for Rust.
 
 **Transparency Statement:** Majority of work done in this fork was produced using Claude Fable 5.2.
 
