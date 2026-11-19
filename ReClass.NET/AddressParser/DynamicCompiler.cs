@@ -98,6 +98,17 @@ namespace ReClassNET.AddressParser
 							)
 						);
 					}
+				case SignatureExpression signatureExpression:
+					{
+						var findPatternInModuleFunc = typeof(IProcessReader).GetRuntimeMethod(nameof(IProcessReader.FindPatternInModule), new[] { typeof(string), typeof(MemoryScanner.BytePattern) });
+
+						return Expression.Call(
+							processParameter,
+							findPatternInModuleFunc,
+							Expression.Constant(signatureExpression.ModuleName),
+							Expression.Constant(signatureExpression.Pattern)
+						);
+					}
 				case ReadMemoryExpression readMemoryExpression:
 					{
 						var addressParameter = GenerateMethodBody(readMemoryExpression.Expression, processParameter);

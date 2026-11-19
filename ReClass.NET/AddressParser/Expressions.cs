@@ -1,4 +1,6 @@
-﻿namespace ReClassNET.AddressParser
+﻿using ReClassNET.MemoryScanner;
+
+namespace ReClassNET.AddressParser
 {
 	public interface IExpression
 	{
@@ -94,6 +96,22 @@
 		public ModuleExpression(string name)
 		{
 			Name = name;
+		}
+	}
+
+	/// <summary>
+	/// A byte signature which gets searched in a module (&lt;module:AA ?? BB&gt;).
+	/// </summary>
+	public class SignatureExpression : IExpression
+	{
+		public string ModuleName { get; }
+
+		public BytePattern Pattern { get; }
+
+		public SignatureExpression(string moduleName, BytePattern pattern)
+		{
+			ModuleName = moduleName;
+			Pattern = pattern;
 		}
 	}
 }

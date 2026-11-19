@@ -76,16 +76,100 @@ namespace ReClassNET.MemoryScanner
 			Contract.Requires(pattern != null);
 			Contract.Requires(data != null);
 
-			var limit = data.Length - pattern.Length;
-			for (var i = 0; i < limit; ++i)
+			return FindPattern(pattern, new ReadOnlySpan<byte>(data));
+		}
+
+		/// <summary>
+		/// Searchs for the <see cref="BytePattern"/> in the specified data.
+		/// </summary>
+		/// <param name="pattern">The pattern to search.</param>
+		/// <param name="data">The data to scan.</param>
+		/// <returns>The index in data where the pattern was found or -1 otherwise.</returns>
+		public static int FindPattern(BytePattern pattern, ReadOnlySpan<byte> data)
+		{
+			Contract.Requires(pattern != null);
+
+			pattern.GetValuesAndMasks(out var values, out var masks);
+
+			var length = values.Length;
+			if (length == 0 || data.Length < length)
 			{
-				if (pattern.Equals(data, i))
+				return -1;
+			}
+
+			// Use the longest run of bytes without wildcards as anchor for the vectorized search.
+			var anchorStart = 0;
+			var anchorLength = 0;
+			for (var i = 0; i < length;)
+			{
+				if (masks[i] != 0xFF)
 				{
-					return i;
+					++i;
+					continue;
+				}
+
+				var runStart = i;
+				while (i < length && masks[i] == 0xFF)
+				{
+					++i;
+				}
+				if (i - runStart > anchorLength)
+				{
+					anchorStart = runStart;
+					anchorLength = i - runStart;
 				}
 			}
 
+			var lastStart = data.Length - length;
+
+			if (anchorLength == 0)
+			{
+				for (var i = 0; i <= lastStart; ++i)
+				{
+					if (IsMatch(data.Slice(i, length), values, masks))
+					{
+						return i;
+					}
+				}
+
+				return -1;
+			}
+
+			var anchor = new ReadOnlySpan<byte>(values, anchorStart, anchorLength);
+
+			var position = 0;
+			while (position <= lastStart)
+			{
+				var index = data.Slice(position + anchorStart, lastStart - position + anchorLength).IndexOf(anchor);
+				if (index < 0)
+				{
+					return -1;
+				}
+
+				position += index;
+
+				if (IsMatch(data.Slice(position, length), values, masks))
+				{
+					return position;
+				}
+
+				++position;
+			}
+
 			return -1;
+		}
+
+		private static bool IsMatch(ReadOnlySpan<byte> data, byte[] values, byte[] masks)
+		{
+			for (var i = 0; i < values.Length; ++i)
+			{
+				if ((data[i] & masks[i]) != values[i])
+				{
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		/// <summary>

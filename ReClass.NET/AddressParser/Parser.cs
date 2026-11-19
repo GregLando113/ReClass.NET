@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using ReClassNET.MemoryScanner;
 
 namespace ReClassNET.AddressParser
 {
@@ -172,7 +173,7 @@ namespace ReClassNET.AddressParser
 					}
 				case Token.Identifier:
 					{
-						var node = new ModuleExpression(tokenizer.Identifier);
+						var node = ParseIdentifier(tokenizer.Identifier);
 
 						tokenizer.ReadNextToken();
 
@@ -181,6 +182,44 @@ namespace ReClassNET.AddressParser
 				default:
 					throw new ParseException($"Unexpect token: {tokenizer.Token}");
 			}
+		}
+
+		/// <summary>
+		/// Parses the content of an identifier: &lt;module&gt; or &lt;module:byte signature&gt;.
+		/// </summary>
+		private static IExpression ParseIdentifier(string identifier)
+		{
+			// A colon is not valid in a file name so it can be used as separator.
+			var separatorIndex = identifier.IndexOf(':');
+			if (separatorIndex == -1)
+			{
+				return new ModuleExpression(identifier);
+			}
+
+			var moduleName = identifier.Substring(0, separatorIndex).Trim();
+			if (moduleName.Length == 0)
+			{
+				throw new ParseException("Missing module name before the signature.");
+			}
+
+			var signature = identifier.Substring(separatorIndex + 1);
+
+			BytePattern pattern;
+			try
+			{
+				pattern = BytePattern.Parse(signature);
+			}
+			catch (ArgumentException)
+			{
+				throw new ParseException($"'{signature.Trim()}' is not a valid byte signature.");
+			}
+
+			if (!pattern.HasFixedBytes)
+			{
+				throw new ParseException("The signature must contain at least one byte which is not a wildcard.");
+			}
+
+			return new SignatureExpression(moduleName, pattern);
 		}
 
 		public static IExpression Parse(string str)

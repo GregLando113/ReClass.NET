@@ -28,6 +28,8 @@ namespace ReClassNET.AddressParser
 
 					return IntPtr.Zero;
 				}
+				case SignatureExpression signatureExpression:
+					return processReader.FindPatternInModule(signatureExpression.ModuleName, signatureExpression.Pattern);
 				case AddExpression addExpression:
 					return Execute(addExpression.Lhs, processReader).Add(Execute(addExpression.Rhs, processReader));
 				case SubtractExpression subtractExpression:

@@ -31,6 +31,16 @@ namespace ReClassNET.MemoryScanner
 			byte ToByte();
 
 			/// <summary>
+			/// Gets the fixed bits of the pattern byte. Wildcard nibbles are zero.
+			/// </summary>
+			byte Value { get; }
+
+			/// <summary>
+			/// Gets the mask of the fixed bits of the pattern byte (0xFF, 0xF0, 0x0F or 0x00).
+			/// </summary>
+			byte Mask { get; }
+
+			/// <summary>
 			/// Compares the pattern byte with the given byte.
 			/// </summary>
 			/// <param name="b"></param>
@@ -59,6 +69,10 @@ namespace ReClassNET.MemoryScanner
 			public bool HasWildcard => nibble1.IsWildcard || nibble2.IsWildcard;
 
 			public byte ToByte() => !HasWildcard ? (byte)((nibble1.Value << 4) + nibble2.Value) : throw new InvalidOperationException();
+
+			public byte Value => (byte)((nibble1.IsWildcard ? 0 : nibble1.Value << 4) | (nibble2.IsWildcard ? 0 : nibble2.Value));
+
+			public byte Mask => (byte)((nibble1.IsWildcard ? 0 : 0xF0) | (nibble2.IsWildcard ? 0 : 0x0F));
 
 			public static PatternByte NewWildcardByte()
 			{
@@ -160,6 +174,10 @@ namespace ReClassNET.MemoryScanner
 
 			public byte ToByte() => value;
 
+			public byte Value => value;
+
+			public byte Mask => 0xFF;
+
 			public bool Equals(byte b) => value == b;
 
 			public Tuple<string, string> ToString(PatternMaskFormat format)
@@ -178,6 +196,11 @@ namespace ReClassNET.MemoryScanner
 
 		private readonly List<IPatternByte> pattern = new List<IPatternByte>();
 
+		// The pattern is immutable after construction so the derived data can be cached.
+		private byte[] values;
+		private byte[] masks;
+		private string combinedString;
+
 		/// <summary>
 		/// Gets the length of the pattern in byte.
 		/// </summary>
@@ -187,6 +210,27 @@ namespace ReClassNET.MemoryScanner
 		/// Gets if the pattern contains wildcards.
 		/// </summary>
 		public bool HasWildcards => pattern.Any(pb => pb is PatternByte pb2 && pb2.HasWildcard);
+
+		/// <summary>
+		/// Gets if the pattern contains at least one byte which isn't a full wildcard.
+		/// </summary>
+		public bool HasFixedBytes => pattern.Any(pb => pb.Mask != 0);
+
+		/// <summary>
+		/// Gets the pattern as value and mask arrays. A data byte matches if (data &amp; mask) == value.
+		/// The returned arrays must not be modified.
+		/// </summary>
+		internal void GetValuesAndMasks(out byte[] values, out byte[] masks)
+		{
+			if (this.values == null || this.masks == null)
+			{
+				this.masks = pattern.Select(pb => pb.Mask).ToArray();
+				this.values = pattern.Select(pb => pb.Value).ToArray();
+			}
+
+			values = this.values;
+			masks = this.masks;
+		}
 
 		private BytePattern()
 		{
@@ -340,6 +384,6 @@ namespace ReClassNET.MemoryScanner
 			}
 		}
 
-		public override string ToString() => ToString(PatternMaskFormat.Combined).Item1;
+		public override string ToString() => combinedString ??= ToString(PatternMaskFormat.Combined).Item1;
 	}
 }

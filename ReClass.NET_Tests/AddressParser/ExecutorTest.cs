@@ -4,6 +4,7 @@ using Moq;
 using NFluent;
 using ReClassNET.AddressParser;
 using ReClassNET.Memory;
+using ReClassNET.MemoryScanner;
 using ReClassNET.Util.Conversion;
 using Xunit;
 
@@ -56,6 +57,28 @@ namespace ReClass.NET_Tests.AddressParser
 			var mock = new Mock<IProcessReader>();
 			mock.Setup(p => p.GetModuleByName("test.module"))
 				.Returns(new Module { Start = (IntPtr)0x100 });
+
+			var executor = CreateExecutor();
+
+			Check.That(executor.Execute(Parser.Parse(expression), mock.Object)).IsEqualTo(expected);
+		}
+
+		public static IEnumerable<object[]> GetSignatureExpressionTestData() => new List<object[]>
+		{
+			new object[] { "<test.module:AA ?? BB>", (IntPtr)0x1234 },
+			new object[] { "<test.module:AA ? BB>", (IntPtr)0x1234 },
+			new object[] { "<test.module:AA ?? BB> + 2", (IntPtr)0x1236 },
+			new object[] { "<test.module:CC>", (IntPtr)0x0 },
+			new object[] { "<not.found:AA ?? BB>", (IntPtr)0x0 },
+		};
+
+		[Theory]
+		[MemberData(nameof(GetSignatureExpressionTestData))]
+		public void SignatureExpressionTest(string expression, IntPtr expected)
+		{
+			var mock = new Mock<IProcessReader>();
+			mock.Setup(p => p.FindPatternInModule("test.module", It.Is<BytePattern>(bp => bp.ToString() == "AA ?? BB")))
+				.Returns((IntPtr)0x1234);
 
 			var executor = CreateExecutor();
 

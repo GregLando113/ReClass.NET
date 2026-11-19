@@ -10,6 +10,7 @@ using ReClassNET.AddressParser;
 using ReClassNET.Core;
 using ReClassNET.Debugger;
 using ReClassNET.Extensions;
+using ReClassNET.MemoryScanner;
 using ReClassNET.Native;
 using ReClassNET.Symbols;
 using ReClassNET.Util.Conversion;
@@ -31,6 +32,26 @@ namespace ReClassNET.Memory
 		private readonly Dictionary<IntPtr, string> rttiCache = new Dictionary<IntPtr, string>();
 
 		private readonly List<Module> modules = new List<Module>();
+
+		/// <summary>Lookup for <see cref="GetModuleByName"/>. Guarded by the <see cref="modules"/> lock and rebuilt with the list.</summary>
+		private readonly Dictionary<string, Module> modulesByName = new Dictionary<string, Module>(StringComparer.InvariantCultureIgnoreCase);
+
+		private readonly struct SignatureCacheEntry
+		{
+			public IntPtr ModuleStart { get; }
+			public IntPtr ModuleSize { get; }
+			public IntPtr Result { get; }
+
+			public SignatureCacheEntry(IntPtr moduleStart, IntPtr moduleSize, IntPtr result)
+			{
+				ModuleStart = moduleStart;
+				ModuleSize = moduleSize;
+				Result = result;
+			}
+		}
+
+		/// <summary>Results of <see cref="FindPatternInModule"/> keyed by module name and normalized pattern. Misses are cached too.</summary>
+		private readonly Dictionary<(string, string), SignatureCacheEntry> signatureCache = new Dictionary<(string, string), SignatureCacheEntry>();
 
 		private readonly List<Section> sections = new List<Section>();
 
@@ -114,6 +135,7 @@ namespace ReClassNET.Memory
 					Close();
 
 					rttiCache.Clear();
+					ClearSignatureCache();
 
 					process = info;
 
@@ -140,6 +162,8 @@ namespace ReClassNET.Memory
 					handle = IntPtr.Zero;
 
 					process = null;
+
+					ClearSignatureCache();
 				}
 
 				ProcessClosed?.Invoke(this);
@@ -367,11 +391,141 @@ namespace ReClassNET.Memory
 
 		public Module GetModuleByName(string name)
 		{
+			if (name == null)
+			{
+				return null;
+			}
+
 			lock (modules)
 			{
-				return modules
-					.FirstOrDefault(m => m.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase));
+				return modulesByName.TryGetValue(name, out var module) ? module : null;
 			}
+		}
+
+		/// <summary>Rebuilds the name lookup. Must be called with the <see cref="modules"/> lock held.</summary>
+		private void RebuildModuleLookup()
+		{
+			modulesByName.Clear();
+
+			foreach (var module in modules)
+			{
+				if (module.Name != null)
+				{
+					// The first module wins if a name is used multiple times.
+					modulesByName.TryAdd(module.Name, module);
+				}
+			}
+		}
+
+		/// <summary>Searchs for the byte pattern in the module with the given name. The result is cached until the process changes or the module gets relocated.</summary>
+		/// <param name="moduleName">The name of the module.</param>
+		/// <param name="pattern">The pattern to search.</param>
+		/// <returns>The address of the first match or <see cref="IntPtr.Zero"/> if the module or the pattern was not found.</returns>
+		public IntPtr FindPatternInModule(string moduleName, BytePattern pattern)
+		{
+			Contract.Requires(pattern != null);
+
+			var module = GetModuleByName(moduleName);
+			if (module == null)
+			{
+				// Not cached because the module may get loaded later.
+				return IntPtr.Zero;
+			}
+
+			var key = (module.Name.ToUpperInvariant(), pattern.ToString());
+
+			lock (signatureCache)
+			{
+				if (signatureCache.TryGetValue(key, out var entry) && entry.ModuleStart == module.Start && entry.ModuleSize == module.Size)
+				{
+					return entry.Result;
+				}
+			}
+
+			if (!IsValid)
+			{
+				return IntPtr.Zero;
+			}
+
+			var result = ScanModule(module, pattern);
+
+			// The module list can outlive the process for some seconds, don't cache what was read from a dead process.
+			if (result == IntPtr.Zero && !IsValid)
+			{
+				return IntPtr.Zero;
+			}
+
+			lock (signatureCache)
+			{
+				signatureCache[key] = new SignatureCacheEntry(module.Start, module.Size, result);
+			}
+
+			return result;
+		}
+
+		private void ClearSignatureCache()
+		{
+			lock (signatureCache)
+			{
+				signatureCache.Clear();
+			}
+		}
+
+		private IntPtr ScanModule(Module module, BytePattern pattern)
+		{
+			var moduleSize = module.Size.ToInt64();
+			if (moduleSize <= 0 || moduleSize > int.MaxValue || pattern.Length > moduleSize)
+			{
+				return IntPtr.Zero;
+			}
+
+			var moduleStart = module.Start.ToInt64();
+			var moduleEnd = moduleStart + moduleSize;
+
+			List<Section> moduleSections;
+			lock (sections)
+			{
+				moduleSections = sections
+					.Where(s => s.Start.ToInt64() < moduleEnd && s.End.ToInt64() > moduleStart)
+					.ToList();
+			}
+
+			// Gaps and unreadable sections stay zero.
+			var buffer = new byte[moduleSize];
+
+			if (moduleSections.Count == 0)
+			{
+				ReadRemoteMemoryIntoBuffer(module.Start, ref buffer);
+			}
+			else
+			{
+				// Read the sections one by one because a single unreadable page fails the whole read.
+				foreach (var section in moduleSections)
+				{
+					if ((section.Protection & SectionProtection.Guard) == SectionProtection.Guard)
+					{
+						continue;
+					}
+
+					var start = Math.Max(section.Start.ToInt64(), moduleStart);
+					var end = Math.Min(section.End.ToInt64(), moduleEnd);
+					var offset = (int)(start - moduleStart);
+					var length = (int)(end - start);
+
+					if (!ReadRemoteMemoryIntoBuffer((IntPtr)start, ref buffer, offset, length))
+					{
+						Array.Clear(buffer, offset, length);
+					}
+				}
+			}
+
+			var index = PatternScanner.FindPattern(pattern, buffer);
+			if (index == -1)
+			{
+				return IntPtr.Zero;
+			}
+
+			return module.Start + index;
 		}
 
 		/// <summary>Tries to map the given address to a section or a module of the process.</summary>
@@ -440,6 +594,7 @@ namespace ReClassNET.Memory
 				lock (modules)
 				{
 					modules.Clear();
+					RebuildModuleLookup();
 				}
 				lock (sections)
 				{
@@ -460,6 +615,7 @@ namespace ReClassNET.Memory
 				{
 					modules.Clear();
 					modules.AddRange(newModules);
+					RebuildModuleLookup();
 				}
 				lock (sections)
 				{

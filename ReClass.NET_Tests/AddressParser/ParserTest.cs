@@ -63,6 +63,44 @@ namespace ReClass.NET_Tests.AddressParser
 			Check.That(Parser.Parse(expression)).IsInstanceOfType(type);
 		}
 
+		[Theory]
+		[InlineData("<test.exe:AA>", "test.exe", "AA")]
+		[InlineData("<test.exe:FF 35 ?? ?? ?? ?? E8>", "test.exe", "FF 35 ?? ?? ?? ?? E8")]
+		[InlineData("<test.exe:FF 35 ? ? ? ? E8>", "test.exe", "FF 35 ?? ?? ?? ?? E8")]
+		[InlineData("<test.exe:ff35????e8>", "test.exe", "FF 35 ?? ?? E8")]
+		[InlineData("< test.exe : A? ?B ?? >", "test.exe", "A? ?B ??")]
+		public void SignatureExpressionTests(string expression, string moduleName, string pattern)
+		{
+			var signatureExpression = (SignatureExpression)Parser.Parse(expression);
+
+			Check.That(signatureExpression.ModuleName).IsEqualTo(moduleName);
+			Check.That(signatureExpression.Pattern.ToString()).IsEqualTo(pattern);
+		}
+
+		[Theory]
+		[InlineData("[<test.exe:FF 35 ?? ?? ?? ?? E8> + 2]", typeof(ReadMemoryExpression))]
+		[InlineData("<test.exe:FF ?? E8> + 2", typeof(AddExpression))]
+		public void SignatureInExpressionTests(string expression, Type type)
+		{
+			Check.That(Parser.Parse(expression)).IsInstanceOfType(type);
+		}
+
+		[Theory]
+		[InlineData("<test.exe:>")]
+		[InlineData("<test.exe: >")]
+		[InlineData("<:AA>")]
+		[InlineData("< :AA>")]
+		[InlineData("<test.exe:ZZ>")]
+		[InlineData("<test.exe:AA,BB>")]
+		[InlineData("<test.exe:0xAA>")]
+		[InlineData("<test.exe:??>")]
+		[InlineData("<test.exe:? ?? ?>")]
+		[InlineData("<test.exe:AA")]
+		public void InvalidSignatureTests(string expression)
+		{
+			Check.ThatCode(() => Parser.Parse(expression)).Throws<ParseException>();
+		}
+
 		[Fact]
 		public void ReadMemoryDefaultByteCountCheck()
 		{

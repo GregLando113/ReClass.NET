@@ -72,6 +72,7 @@ ReClass.NET runs on Windows and needs the [.NET 10 Desktop Runtime](https://dotn
   **[0x4012ABDE]** will read the integer (4 byte on x86 / 8 byte on x64) from the address 0x4012ABDE and use this value as class address.  
   **[\<Program.exe> + 0xDE] - AB** will use the base address of Program.exe, add 0xDE to it, read the value from this address and finally sub 0xAB from it.  
   **[\<Program.exe> + offset + [\<Program.exe> + offset2]]** Nested operations are supported too.  
+  **[\<Program.exe:FF 35 ?? ?? ?? ?? E8> + 2]** will search the byte signature in Program.exe and use the address of the first match, so the formula survives updates of the program. **?** and **??** are wildcards for a whole byte, a single nibble can be a wildcard too (**F?**, **?5**). The result of the search is cached until the process gets re-attached or the module moves.  
   
   Valid operations are read ([..]), add (+), sub (-), mul (*) and div (/). Please note that all operations are integer calculations.
 
