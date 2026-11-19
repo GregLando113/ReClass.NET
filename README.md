@@ -1,7 +1,7 @@
 # ReClass.NET
 This is a port of ReClass to the .NET platform with lots of additional features.
 
-![](https://abload.de/img/main4hsbj.jpg)
+![](docs/img/preview-1.png)
 
 ## Features
 - Support for x86 / x64
@@ -12,7 +12,7 @@ This is a port of ReClass to the .NET platform with lots of additional features.
   - Int 8 / 16 / 32 / 64
   - UInt 8 / 16 / 32 / 64
   - Bool
-  - Bits ![](https://abload.de/img/bitsnhlql.jpg)
+  - Bits
   - Enumerations
   - Float / Double
   - Vector 2 / 3 / 4
@@ -59,7 +59,6 @@ Plugins written in C# must target `net10.0-windows` and reference `ReClass.NET.d
 If you want to develop your own plugin just learn from the code of the [Sample Plugins](https://github.com/ReClassNET/ReClass.NET-SamplePlugin) and [Frostbite Plugin](https://github.com/ReClassNET/ReClass.NET-FrostbitePlugin) repositories. If you have developed a nice plugin, leave me a message and I will add it to the list above.
 
 ## Installation
-Just download the [latest version](https://github.com/ReClassNET/ReClass.NET/releases) and start the x86 / x64 version or let the launcher decide.
 
 ReClass.NET runs on Windows and needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0). Install the x64 runtime for the launcher and the x64 version, and the x86 runtime as well if you want to use the x86 version.
 
@@ -124,6 +123,7 @@ Settings
 - P47R!CK
 - DogMatt
 - [ajkhoury](https://github.com/ajkhoury)
+- [KAOS](https://github.com/GregLando113)
 - [IChooseYou](https://github.com/IChooseYou)
 - [stevemk14ebr](https://github.com/stevemk14ebr)
 - [Timboy67678](https://github.com/Timboy67678)
