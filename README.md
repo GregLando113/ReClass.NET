@@ -35,7 +35,7 @@ This is a port of ReClass to the .NET platform with lots of additional features.
   - Import files from Cheat Engine and CrySearch
   - Scan for values correlated to your input
 - Class address calculator
-- Code Generator (C++ / C#)
+- Code Generator (C++ / C# / Rust)
 - Module / Section Dumper
 - Debugger with "Find out what writes/accesses this address" support
 - Plugin Support

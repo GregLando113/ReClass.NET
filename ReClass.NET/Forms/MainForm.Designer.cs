@@ -165,6 +165,7 @@ namespace ReClassNET.Forms
 			this.toolStripSeparator16 = new System.Windows.Forms.ToolStripSeparator();
 			this.generateCppCodeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			this.generateCSharpCodeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			this.generateRustCodeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			this.helpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			this.aboutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
@@ -1300,7 +1301,8 @@ namespace ReClassNET.Forms
             this.showEnumsToolStripMenuItem,
             this.toolStripSeparator16,
             this.generateCppCodeToolStripMenuItem,
-            this.generateCSharpCodeToolStripMenuItem});
+            this.generateCSharpCodeToolStripMenuItem,
+            this.generateRustCodeToolStripMenuItem});
 			this.projectToolStripMenuItem.Name = "projectToolStripMenuItem";
 			this.projectToolStripMenuItem.Size = new System.Drawing.Size(56, 20);
 			this.projectToolStripMenuItem.Text = "Project";
@@ -1350,6 +1352,14 @@ namespace ReClassNET.Forms
 			this.generateCSharpCodeToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
 			this.generateCSharpCodeToolStripMenuItem.Text = "Generate C# Code...";
 			this.generateCSharpCodeToolStripMenuItem.Click += new System.EventHandler(this.generateCSharpCodeToolStripMenuItem_Click);
+			// 
+			// generateRustCodeToolStripMenuItem
+			// 
+			this.generateRustCodeToolStripMenuItem.Image = global::ReClassNET.Properties.Resources.B16x16_Page_Code;
+			this.generateRustCodeToolStripMenuItem.Name = "generateRustCodeToolStripMenuItem";
+			this.generateRustCodeToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
+			this.generateRustCodeToolStripMenuItem.Text = "Generate Rust Code...";
+			this.generateRustCodeToolStripMenuItem.Click += new System.EventHandler(this.generateRustCodeToolStripMenuItem_Click);
 			// 
 			// helpToolStripMenuItem
 			// 
@@ -1464,6 +1474,7 @@ namespace ReClassNET.Forms
 		private System.Windows.Forms.ToolStripSeparator toolStripSeparator16;
 		private System.Windows.Forms.ToolStripMenuItem generateCppCodeToolStripMenuItem;
 		private System.Windows.Forms.ToolStripMenuItem generateCSharpCodeToolStripMenuItem;
+		private System.Windows.Forms.ToolStripMenuItem generateRustCodeToolStripMenuItem;
 		private System.Windows.Forms.Timer processUpdateTimer;
 		private System.Windows.Forms.ToolStripSeparator toolStripSeparator17;
 		private System.Windows.Forms.ToolStripMenuItem loadSymbolToolStripMenuItem;

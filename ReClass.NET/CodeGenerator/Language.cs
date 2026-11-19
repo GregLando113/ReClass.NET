@@ -3,6 +3,7 @@
 	public enum Language
 	{
 		Cpp,
-		CSharp
+		CSharp,
+		Rust
 	}
 }

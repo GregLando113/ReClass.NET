@@ -34,7 +34,12 @@ namespace ReClassNET.Forms
 
 			codeRichTextBox.Rtf = new RtfCodeColorizer().Colorize(
 				code,
-				generator.Language == Language.Cpp ? Languages.Cpp : Languages.CSharp
+				generator.Language switch
+				{
+					Language.Cpp => Languages.Cpp,
+					Language.Rust => RustLanguage.Instance,
+					_ => Languages.CSharp
+				}
 			);
 		}
 
