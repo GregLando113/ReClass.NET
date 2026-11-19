@@ -10,8 +10,9 @@ This is a port of ReClass to the .NET platform with lots of additional features.
   - If adding a class instance for example, the class instance will absorb Base Hex Nodes to make room for the class instance instead of resizing the structure and shifting offsets of other nodes.
   - Deleting a field that is not a base hex node will likewise create base hex nodes to fill the memory left behind instead of removing bytes from the class.
 - class template support.
-  - New templates section. Define a template with template parameters used as placeholders
-  - Within classes, define a Template Implementation that defines
+  - New templates section. Define a template with template parameters used as placeholders e.x. `TArray<T>`
+  - Within classes, define a Template Implementation field that combines the template along with chosen resolved parameters, no template parameters can be unresolved for a template implementation to be valid. e.g. `TArray<AgentView*>`
+  - nested templates are supported e.g. `TArray<TList<T>> m_hashSlots;`
 - Address formulas now support byte signature scanning
   - Module tokens e.g. <Gw.exe> now support a byte signature extension to scan for, such as <Gw.exe:55 8B EC 83 ??> etc.
 
