@@ -17,7 +17,14 @@ namespace ReClassNET.DataExchange.ReClass
 		{
 			using var fs = new FileStream(filePath, FileMode.Create);
 
-			Save(fs, logger);
+			if (IsUncompressedFilePath(filePath))
+			{
+				SaveUncompressed(fs, logger);
+			}
+			else
+			{
+				Save(fs, logger);
+			}
 		}
 
 		public void Save(Stream output, ILogger logger)
@@ -27,7 +34,21 @@ namespace ReClassNET.DataExchange.ReClass
 			var dataEntry = archive.CreateEntry(DataFileName);
 			using var entryStream = dataEntry.Open();
 
-			var document = new XDocument(
+			CreateDocument(logger).Save(entryStream);
+		}
+
+		/// <summary>Saves the plain data document without the archive around it (<see cref="UncompressedFileExtension"/>).</summary>
+		public void SaveUncompressed(Stream output, ILogger logger)
+		{
+			Contract.Requires(output != null);
+			Contract.Requires(logger != null);
+
+			CreateDocument(logger).Save(output);
+		}
+
+		private XDocument CreateDocument(ILogger logger)
+		{
+			return new XDocument(
 				new XComment($"{Constants.ApplicationName} {Constants.ApplicationVersion} by {Constants.Author}"),
 				new XComment($"Website: {Constants.HomepageUrl}"),
 				new XElement(
@@ -41,8 +62,6 @@ namespace ReClassNET.DataExchange.ReClass
 					new XElement(XmlClassesElement, CreateClassElements(project.Classes, logger))
 				)
 			);
-
-			document.Save(entryStream);
 		}
 
 		private static IEnumerable<XElement> CreateEnumElements(IEnumerable<EnumDescription> enums)

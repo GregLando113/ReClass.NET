@@ -463,8 +463,9 @@ namespace ReClassNET.Forms
 			using var ofd = new OpenFileDialog
 			{
 				CheckFileExists = true,
-				Filter = $"All ReClass Types |*{ReClassNetFile.FileExtension};*{ReClassFile.FileExtension};*{ReClassQtFile.FileExtension}"
+				Filter = $"All ReClass Types |*{ReClassNetFile.FileExtension};*{ReClassNetFile.UncompressedFileExtension};*{ReClassFile.FileExtension};*{ReClassQtFile.FileExtension}"
 				         + $"|{ReClassNetFile.FormatName} (*{ReClassNetFile.FileExtension})|*{ReClassNetFile.FileExtension}"
+				         + $"|{ReClassNetFile.UncompressedFormatName} (*{ReClassNetFile.UncompressedFileExtension})|*{ReClassNetFile.UncompressedFileExtension}"
 				         + $"|{ReClassFile.FormatName} (*{ReClassFile.FileExtension})|*{ReClassFile.FileExtension}"
 				         + $"|{ReClassQtFile.FormatName} (*{ReClassQtFile.FileExtension})|*{ReClassQtFile.FileExtension}"
 			};
@@ -488,7 +489,7 @@ namespace ReClassNET.Forms
 			LoadProjectFromPath(path, ref project);
 
 			// If the file is a ReClass.NET file remember the path.
-			if (Path.GetExtension(path) == ReClassNetFile.FileExtension)
+			if (ReClassNetFile.IsFilePath(path))
 			{
 				project.Path = path;
 			}
@@ -506,7 +507,8 @@ namespace ReClassNET.Forms
 			Contract.Ensures(Contract.ValueAtReturn(out project) != null);
 
 			IReClassImport import;
-			switch (Path.GetExtension(path)?.ToLower())
+			// The uncompressed extension has two parts, so it can't be matched with Path.GetExtension.
+			switch (ReClassNetFile.IsFilePath(path) ? ReClassNetFile.FileExtension : Path.GetExtension(path)?.ToLower())
 			{
 				case ReClassNetFile.FileExtension:
 					import = new ReClassNetFile(project);

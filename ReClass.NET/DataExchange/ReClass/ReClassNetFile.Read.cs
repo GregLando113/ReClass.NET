@@ -38,10 +38,13 @@ namespace ReClassNET.DataExchange.ReClass
 			}
 		}
 
-		private void LoadCore(Stream input, ILogger logger)
+		/// <summary>Reads the data document from the stream which is either an archive or the plain document (<see cref="UncompressedFileExtension"/>).</summary>
+		private static XDocument LoadDocument(Stream input)
 		{
-			Contract.Requires(input != null);
-			Contract.Requires(logger != null);
+			if (!IsCompressed(input))
+			{
+				return XDocument.Load(input);
+			}
 
 			using var archive = new ZipArchive(input, ZipArchiveMode.Read);
 			var dataEntry = archive.GetEntry(DataFileName);
@@ -51,7 +54,15 @@ namespace ReClassNET.DataExchange.ReClass
 			}
 
 			using var entryStream = dataEntry.Open();
-			var document = XDocument.Load(entryStream);
+			return XDocument.Load(entryStream);
+		}
+
+		private void LoadCore(Stream input, ILogger logger)
+		{
+			Contract.Requires(input != null);
+			Contract.Requires(logger != null);
+
+			var document = LoadDocument(input);
 			if (document.Root?.Element(XmlClassesElement) == null)
 			{
 				throw new FormatException("The data has not the correct format.");

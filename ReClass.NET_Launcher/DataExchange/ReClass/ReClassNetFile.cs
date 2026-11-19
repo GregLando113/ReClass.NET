@@ -18,6 +18,11 @@ namespace ReClassNET.DataExchange.ReClass
 
 			using (var fs = new FileStream(path, FileMode.Open))
 			{
+				if (!IsCompressed(fs))
+				{
+					return XDocument.Load(fs).Root?.Attribute(XmlPlatformAttribute)?.Value;
+				}
+
 				using (var archive = new ZipArchive(fs, ZipArchiveMode.Read))
 				{
 					var dataEntry = archive.GetEntry(DataFileName);

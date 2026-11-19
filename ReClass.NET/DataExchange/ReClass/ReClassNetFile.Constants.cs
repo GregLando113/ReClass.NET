@@ -6,6 +6,39 @@
 		public const string FileExtension = ".rcnet";
 		public const string FileExtensionId = "rcnetfile";
 
+		/// <summary>The extension of the uncompressed variant, which is the plain content of the data file of a <see cref="FileExtension"/> archive.</summary>
+		public const string UncompressedFormatName = "ReClass.NET XML File";
+		public const string UncompressedFileExtension = ".rcnet.xml";
+
+		/// <summary>Checks if the path names an uncompressed ReClass.NET file (<see cref="UncompressedFileExtension"/>).</summary>
+		public static bool IsUncompressedFilePath(string path)
+		{
+			return path != null && path.EndsWith(UncompressedFileExtension, System.StringComparison.OrdinalIgnoreCase);
+		}
+
+		/// <summary>Checks if the path names a ReClass.NET file, either compressed or uncompressed.</summary>
+		public static bool IsFilePath(string path)
+		{
+			return path != null && (path.EndsWith(FileExtension, System.StringComparison.OrdinalIgnoreCase) || IsUncompressedFilePath(path));
+		}
+
+		/// <summary>Checks if the stream starts with the signature of a zip archive. The position of the stream is not changed.</summary>
+		private static bool IsCompressed(System.IO.Stream input)
+		{
+			if (!input.CanSeek)
+			{
+				// Only the compressed format is exchanged over streams which can't seek.
+				return true;
+			}
+
+			var position = input.Position;
+			var first = input.ReadByte();
+			var second = input.ReadByte();
+			input.Position = position;
+
+			return first == 'P' && second == 'K';
+		}
+
 		private const uint FileVersion = 0x00010001;
 		private const uint FileVersionCriticalMask = 0xFFFF0000;
 

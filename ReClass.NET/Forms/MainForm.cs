@@ -337,11 +337,38 @@ namespace ReClassNET.Forms
 			{
 				DefaultExt = ReClassNetFile.FileExtension,
 				Filter = $"{ReClassNetFile.FormatName} (*{ReClassNetFile.FileExtension})|*{ReClassNetFile.FileExtension}"
+				         + $"|{ReClassNetFile.UncompressedFormatName} (*{ReClassNetFile.UncompressedFileExtension})|*{ReClassNetFile.UncompressedFileExtension}",
+				FilterIndex = ReClassNetFile.IsUncompressedFilePath(currentProject.Path) ? 2 : 1
 			};
 
 			if (sfd.ShowDialog() == DialogResult.OK)
 			{
-				currentProject.Path = sfd.FileName;
+				var path = sfd.FileName;
+
+				// The dialog can't be relied on to append an extension with two parts, so make sure the chosen format is the one which gets written.
+				if (sfd.FilterIndex == 2 && !ReClassNetFile.IsUncompressedFilePath(path))
+				{
+					foreach (var extension in new[] { ".xml", ReClassNetFile.FileExtension })
+					{
+						if (path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+						{
+							path = path.Substring(0, path.Length - extension.Length);
+							break;
+						}
+					}
+					path += ReClassNetFile.UncompressedFileExtension;
+
+					if (File.Exists(path) && MessageBox.Show(
+						$"'{path}' already exists." + Environment.NewLine + "Do you want to replace it?",
+						Constants.ApplicationName,
+						MessageBoxButtons.YesNo,
+						MessageBoxIcon.Warning) != DialogResult.Yes)
+					{
+						return;
+					}
+				}
+
+				currentProject.Path = path;
 
 				saveToolStripMenuItem_Click(sender, e);
 			}
@@ -787,7 +814,7 @@ namespace ReClassNET.Forms
 			{
 				if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Any())
 				{
-					switch (Path.GetExtension(files.First()))
+					switch (ReClassNetFile.IsFilePath(files.First()) ? ReClassNetFile.FileExtension : Path.GetExtension(files.First()))
 					{
 						case ReClassNetFile.FileExtension:
 						case ReClassQtFile.FileExtension:
