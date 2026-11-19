@@ -1,6 +1,20 @@
 # ReClass.NET
 This is a port of ReClass to the .NET platform with lots of additional features.
 
+## KAOS Fork Major Changes
+
+- Ported to .NET 10 runtime.
+- Class field definition changes retain the shape of the parent class.
+  - If adding a class instance for example, the class instance will absorb Base Hex Nodes to make room for the class instance instead of resizing the structure and shifting offsets of other nodes.
+  - Deleting a field that is not a base hex node will likewise create base hex nodes to fill the memory left behind instead of removing bytes from the class.
+- class template support.
+  - New templates section. Define a template with template parameters used as placeholders
+  - Within classes, define a Template Implementation that defines
+- Address formulas now support byte signature scanning
+  - Module tokens e.g. <Gw.exe> now support a byte signature extension to scan for, such as <Gw.exe:55 8B EC 83 ??> etc.
+
+**Transparency Statement:** Majority of work done in this fork was produced using Claude Fable 5.2.
+
 ![](docs/img/preview-1.png)
 
 ## Features
