@@ -1,6 +1,8 @@
 # ReClass.NET
 This is a port of ReClass to the .NET platform with lots of additional features.
 
+![](docs/img/preview-1.png)
+
 ## KAOS Fork Major Changes
 
 - Ported to .NET 10 runtime.
@@ -14,8 +16,6 @@ This is a port of ReClass to the .NET platform with lots of additional features.
   - Module tokens e.g. <Gw.exe> now support a byte signature extension to scan for, such as <Gw.exe:55 8B EC 83 ??> etc.
 
 **Transparency Statement:** Majority of work done in this fork was produced using Claude Fable 5.2.
-
-![](docs/img/preview-1.png)
 
 ## Features
 - Support for x86 / x64
